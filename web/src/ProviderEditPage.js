@@ -491,7 +491,7 @@ class ProviderEditPage extends React.Component {
                   this.updateProviderField("subType", "Default");
                 }
               } else if (this.state.provider.category === "Tool") {
-                if (value === "Time") {
+                if (value === "Time" || value === "WebSearch") {
                   this.updateProviderField("subType", "Default");
                 }
               } else if (this.state.provider.category === "Text-to-Speech") {

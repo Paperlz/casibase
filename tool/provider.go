@@ -34,6 +34,8 @@ func NewProvider(category string, typ string, lang string) (Provider, error) {
 	switch typ {
 	case "Time":
 		return &TimeProvider{}, nil
+	case "WebSearch":
+		return &WebSearchProvider{}, nil
 	default:
 		return nil, fmt.Errorf(i18n.Translate(lang, "tool:unsupported tool provider type: %s"), typ)
 	}
