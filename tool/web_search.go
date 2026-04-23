@@ -15,6 +15,7 @@
 package tool
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -31,13 +32,41 @@ import (
 )
 
 // WebSearchProvider is the Tool provider Type "WebSearch" (single web_search tool).
-type WebSearchProvider struct{}
-
-func (p *WebSearchProvider) BuiltinTools() []builtin_tool.BuiltinTool {
-	return []builtin_tool.BuiltinTool{&webSearchBuiltin{}}
+type WebSearchProvider struct {
+	engine         webSearchEngine
+	apiKey         string
+	searchEngineID string
+	endpoint       string
 }
 
-type webSearchBuiltin struct{}
+func NewWebSearchProvider(config ProviderConfig) (*WebSearchProvider, error) {
+	engine, err := parseWebSearchEngine(config.SubType)
+	if err != nil {
+		return nil, err
+	}
+	return &WebSearchProvider{
+		engine:         engine,
+		apiKey:         strings.TrimSpace(config.ClientSecret),
+		searchEngineID: strings.TrimSpace(config.ClientId),
+		endpoint:       strings.TrimSpace(config.ProviderUrl),
+	}, nil
+}
+
+func (p *WebSearchProvider) BuiltinTools() []builtin_tool.BuiltinTool {
+	return []builtin_tool.BuiltinTool{&webSearchBuiltin{
+		engine:         p.engine,
+		apiKey:         p.apiKey,
+		searchEngineID: p.searchEngineID,
+		endpoint:       p.endpoint,
+	}}
+}
+
+type webSearchBuiltin struct {
+	engine         webSearchEngine
+	apiKey         string
+	searchEngineID string
+	endpoint       string
+}
 
 const (
 	webSearchDefaultCount    = 5
@@ -47,10 +76,22 @@ const (
 	webSearchUserAgent       = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 )
 
+type webSearchEngine string
+
+const (
+	webSearchEngineDefault    webSearchEngine = "default"
+	webSearchEngineDuckDuckGo webSearchEngine = "duckduckgo"
+	webSearchEngineBing       webSearchEngine = "bing"
+	webSearchEngineGoogle     webSearchEngine = "google"
+	webSearchEngineBaidu      webSearchEngine = "baidu"
+)
+
 var (
 	webSearchHTTPClient          = &http.Client{Timeout: webSearchTimeout}
 	duckDuckGoHTMLSearchEndpoint = "https://html.duckduckgo.com/html"
 	bingHTMLSearchEndpoint       = "https://www.bing.com/search"
+	googleJSONSearchEndpoint     = "https://www.googleapis.com/customsearch/v1"
+	baiduWebSearchEndpoint       = "https://qianfan.baidubce.com/v2/ai_search/web_search"
 )
 
 type webSearchParams struct {
@@ -78,6 +119,46 @@ type webSearchPayload struct {
 	Count           int                      `json:"count"`
 	ExternalContent webSearchExternalContent `json:"externalContent"`
 	Results         []webSearchResult        `json:"results"`
+}
+
+type googleSearchResponse struct {
+	Items []struct {
+		Title       string `json:"title"`
+		Link        string `json:"link"`
+		Snippet     string `json:"snippet"`
+		DisplayLink string `json:"displayLink"`
+	} `json:"items"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+}
+
+type baiduWebSearchRequest struct {
+	Messages           []baiduWebSearchMessage      `json:"messages"`
+	SearchSource       string                       `json:"search_source"`
+	ResourceTypeFilter []baiduWebSearchResourceType `json:"resource_type_filter"`
+}
+
+type baiduWebSearchMessage struct {
+	Content string `json:"content"`
+	Role    string `json:"role"`
+}
+
+type baiduWebSearchResourceType struct {
+	Type string `json:"type"`
+	TopK int    `json:"top_k"`
+}
+
+type baiduWebSearchResponse struct {
+	Code       string `json:"code,omitempty"`
+	Message    string `json:"message,omitempty"`
+	References []struct {
+		Title     string `json:"title"`
+		URL       string `json:"url"`
+		Content   string `json:"content"`
+		Website   string `json:"website"`
+		WebAnchor string `json:"web_anchor"`
+	} `json:"references"`
 }
 
 func (w *webSearchBuiltin) GetName() string {
@@ -125,7 +206,7 @@ func (t *webSearchBuiltin) Execute(ctx context.Context, arguments map[string]int
 		return webSearchToolError(err.Error()), nil
 	}
 
-	results, provider, err := runWebSearch(ctx, params)
+	results, provider, err := t.runWebSearch(ctx, params)
 	if err != nil {
 		return webSearchToolError(fmt.Sprintf("Web search failed: %s", err.Error())), nil
 	}
@@ -165,8 +246,8 @@ func parseWebSearchArguments(arguments map[string]interface{}) (webSearchParams,
 	return webSearchParams{
 		Query:    query,
 		Count:    readWebSearchCount(arguments["count"]),
-		Language: strings.ToLower(readWebSearchString(arguments, "language", "zh")),
-		Country:  strings.ToLower(readWebSearchString(arguments, "country", "cn")),
+		Language: readWebSearchString(arguments, "language", "zh"),
+		Country:  readWebSearchString(arguments, "country", "cn"),
 	}, nil
 }
 
@@ -188,16 +269,8 @@ func readWebSearchCount(value interface{}) int {
 	switch v := value.(type) {
 	case int:
 		count = v
-	case int64:
-		count = int(v)
 	case float64:
 		count = int(v)
-	case float32:
-		count = int(v)
-	case json.Number:
-		if parsed, err := v.Int64(); err == nil {
-			count = int(parsed)
-		}
 	}
 
 	if count < 1 {
@@ -209,7 +282,34 @@ func readWebSearchCount(value interface{}) int {
 	return count
 }
 
-func runWebSearch(ctx context.Context, params webSearchParams) ([]webSearchResult, string, error) {
+func (t *webSearchBuiltin) runWebSearch(ctx context.Context, params webSearchParams) ([]webSearchResult, string, error) {
+	switch t.engine {
+	case webSearchEngineDuckDuckGo:
+		results, err := runDuckDuckGoSearch(ctx, params)
+		if err != nil {
+			return nil, "", err
+		}
+		return results, "duckduckgo", nil
+	case webSearchEngineBing:
+		results, err := runBingSearch(ctx, params)
+		if err != nil {
+			return nil, "", err
+		}
+		return results, "bing", nil
+	case webSearchEngineGoogle:
+		results, err := runGoogleSearch(ctx, params, t.apiKey, t.searchEngineID, t.endpoint)
+		if err != nil {
+			return nil, "", err
+		}
+		return results, "google", nil
+	case webSearchEngineBaidu:
+		results, err := runBaiduSearch(ctx, params, t.apiKey, t.endpoint)
+		if err != nil {
+			return nil, "", err
+		}
+		return results, "baidu", nil
+	}
+
 	duckDuckGoResults, duckDuckGoErr := runDuckDuckGoSearch(ctx, params)
 	if duckDuckGoErr == nil && len(duckDuckGoResults) > 0 {
 		return duckDuckGoResults, "duckduckgo", nil
@@ -224,6 +324,23 @@ func runWebSearch(ctx context.Context, params webSearchParams) ([]webSearchResul
 		return nil, "", fmt.Errorf("duckduckgo: %v; bing: %v", duckDuckGoErr, bingErr)
 	}
 	return nil, "", fmt.Errorf("no search results found")
+}
+
+func parseWebSearchEngine(value string) (webSearchEngine, error) {
+	switch strings.TrimSpace(value) {
+	case "", "Default":
+		return webSearchEngineDefault, nil
+	case "DuckDuckGo":
+		return webSearchEngineDuckDuckGo, nil
+	case "Bing":
+		return webSearchEngineBing, nil
+	case "Google":
+		return webSearchEngineGoogle, nil
+	case "Baidu":
+		return webSearchEngineBaidu, nil
+	default:
+		return "", fmt.Errorf("unsupported web search engine subtype: %s", value)
+	}
 }
 
 func runDuckDuckGoSearch(ctx context.Context, params webSearchParams) ([]webSearchResult, error) {
@@ -274,6 +391,146 @@ func runBingSearch(ctx context.Context, params webSearchParams) ([]webSearchResu
 		return nil, fmt.Errorf("Bing returned no results")
 	}
 	return limitWebSearchResults(results, params.Count), nil
+}
+
+func runGoogleSearch(ctx context.Context, params webSearchParams, apiKey string, searchEngineID string, endpoint string) ([]webSearchResult, error) {
+	if strings.TrimSpace(apiKey) == "" {
+		return nil, fmt.Errorf("Google search requires an API key in clientSecret")
+	}
+	if strings.TrimSpace(searchEngineID) == "" {
+		return nil, fmt.Errorf("Google search requires a search engine ID (cx) in clientId")
+	}
+
+	query := url.Values{}
+	query.Set("key", apiKey)
+	query.Set("cx", searchEngineID)
+	query.Set("q", params.Query)
+	query.Set("num", fmt.Sprintf("%d", params.Count))
+	if params.Language != "" {
+		query.Set("hl", params.Language)
+	}
+	if params.Country != "" {
+		query.Set("gl", params.Country)
+	}
+
+	body, err := fetchWebSearchAPI(ctx, http.MethodGet, resolveWebSearchEndpoint(endpoint, googleJSONSearchEndpoint), query, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var response googleSearchResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+	if response.Error != nil && response.Error.Message != "" {
+		return nil, fmt.Errorf("Google returned an error: %s", response.Error.Message)
+	}
+
+	results := parseGoogleSearchResponse(response)
+	if len(results) == 0 {
+		return nil, fmt.Errorf("Google returned no results")
+	}
+	return limitWebSearchResults(results, params.Count), nil
+}
+
+func runBaiduSearch(ctx context.Context, params webSearchParams, apiKey string, endpoint string) ([]webSearchResult, error) {
+	if strings.TrimSpace(apiKey) == "" {
+		return nil, fmt.Errorf("Baidu search requires an API key in clientSecret")
+	}
+
+	requestBody := baiduWebSearchRequest{
+		Messages: []baiduWebSearchMessage{
+			{
+				Content: params.Query,
+				Role:    "user",
+			},
+		},
+		SearchSource: "baidu_search_v2",
+		ResourceTypeFilter: []baiduWebSearchResourceType{
+			{
+				Type: "web",
+				TopK: params.Count,
+			},
+		},
+	}
+	requestBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, err
+	}
+
+	headers := map[string]string{
+		"Content-Type":               "application/json",
+		"X-Appbuilder-Authorization": fmt.Sprintf("Bearer %s", apiKey),
+	}
+	body, err := fetchWebSearchAPI(ctx, http.MethodPost, resolveWebSearchEndpoint(endpoint, baiduWebSearchEndpoint), nil, bytes.NewReader(requestBytes), headers)
+	if err != nil {
+		return nil, err
+	}
+
+	var response baiduWebSearchResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+	if response.Code != "" && len(response.References) == 0 {
+		if response.Message != "" {
+			return nil, fmt.Errorf("Baidu returned an error: %s", response.Message)
+		}
+		return nil, fmt.Errorf("Baidu returned an error: %s", response.Code)
+	}
+
+	results := parseBaiduSearchResponse(response)
+	if len(results) == 0 {
+		return nil, fmt.Errorf("Baidu returned no results")
+	}
+	return limitWebSearchResults(results, params.Count), nil
+}
+
+func fetchWebSearchAPI(ctx context.Context, method string, endpoint string, query url.Values, body io.Reader, headers map[string]string) ([]byte, error) {
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	searchQuery := parsedURL.Query()
+	for key, values := range query {
+		for _, value := range values {
+			searchQuery.Add(key, value)
+		}
+	}
+	parsedURL.RawQuery = searchQuery.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, method, parsedURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", webSearchUserAgent)
+	req.Header.Set("Accept", "application/json")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+	resp, err := webSearchHTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, webSearchMaxResponseSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(bodyBytes) > webSearchMaxResponseSize {
+		return nil, fmt.Errorf("response body exceeds %d bytes", webSearchMaxResponseSize)
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		message := strings.TrimSpace(string(bodyBytes))
+		if message == "" {
+			message = resp.Status
+		}
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, message)
+	}
+
+	return bodyBytes, nil
 }
 
 func fetchWebSearchHTML(ctx context.Context, endpoint string, query url.Values) (string, error) {
@@ -401,6 +658,55 @@ func parseBingHTML(body string) ([]webSearchResult, error) {
 	}
 
 	return results, nil
+}
+
+func parseGoogleSearchResponse(response googleSearchResponse) []webSearchResult {
+	results := make([]webSearchResult, 0, len(response.Items))
+	for _, item := range response.Items {
+		title := cleanWebSearchText(item.Title)
+		resultURL := strings.TrimSpace(item.Link)
+		if title == "" || resultURL == "" {
+			continue
+		}
+
+		siteName := strings.TrimSpace(item.DisplayLink)
+		if siteName == "" {
+			siteName = resolveWebSearchSiteName(resultURL)
+		}
+		results = append(results, webSearchResult{
+			Title:    title,
+			URL:      resultURL,
+			Snippet:  cleanWebSearchText(item.Snippet),
+			SiteName: siteName,
+		})
+	}
+	return results
+}
+
+func parseBaiduSearchResponse(response baiduWebSearchResponse) []webSearchResult {
+	results := make([]webSearchResult, 0, len(response.References))
+	for _, reference := range response.References {
+		title := cleanWebSearchText(reference.Title)
+		resultURL := strings.TrimSpace(reference.URL)
+		if title == "" {
+			title = cleanWebSearchText(reference.WebAnchor)
+		}
+		if title == "" || resultURL == "" {
+			continue
+		}
+
+		siteName := strings.TrimSpace(reference.Website)
+		if siteName == "" {
+			siteName = resolveWebSearchSiteName(resultURL)
+		}
+		results = append(results, webSearchResult{
+			Title:    title,
+			URL:      resultURL,
+			Snippet:  cleanWebSearchText(reference.Content),
+			SiteName: siteName,
+		})
+	}
+	return results
 }
 
 func isDuckDuckGoChallenge(body string) bool {
@@ -541,6 +847,14 @@ func resolveWebSearchSiteName(rawURL string) string {
 		return ""
 	}
 	return parsedURL.Hostname()
+}
+
+func resolveWebSearchEndpoint(endpoint string, defaultEndpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return defaultEndpoint
+	}
+	return endpoint
 }
 
 func wrapWebSearchContent(content string) string {

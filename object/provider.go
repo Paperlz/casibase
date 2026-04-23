@@ -723,7 +723,7 @@ func TestToolProvider(p *Provider, lang string) (string, error) {
 		payload.Arguments = map[string]interface{}{}
 	}
 
-	tp, err := tool.NewProvider(p.Category, p.Type, lang)
+	tp, err := tool.NewProvider(getToolProviderConfig(p), lang)
 	if err != nil {
 		return "", err
 	}
@@ -757,6 +757,17 @@ func TestToolProvider(p *Provider, lang string) (string, error) {
 		return "", fmt.Errorf("%s", output)
 	}
 	return output, nil
+}
+
+func getToolProviderConfig(p *Provider) tool.ProviderConfig {
+	return tool.ProviderConfig{
+		Category:     p.Category,
+		Type:         p.Type,
+		SubType:      p.SubType,
+		ProviderUrl:  p.ProviderUrl,
+		ClientId:     p.ClientId,
+		ClientSecret: p.ClientSecret,
+	}
 }
 
 func (p *Provider) processProviderParams(providerDb *Provider) {

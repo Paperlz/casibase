@@ -90,6 +90,9 @@ class ProviderEditPage extends React.Component {
   }
 
   getClientIdLabel(provider) {
+    if (this.isGoogleWebSearchProvider(provider)) {
+      return Setting.getLabel(i18next.t("provider:Search engine ID (cx)"), i18next.t("provider:Search engine ID (cx) - Tooltip"));
+    }
     if (["Model", "Embedding"].includes(provider.category)) {
       if (provider.type === "Tencent Cloud") {
         return Setting.getLabel(i18next.t("general:Secret ID"), i18next.t("general:Secret ID - Tooltip"));
@@ -153,6 +156,9 @@ class ProviderEditPage extends React.Component {
   }
 
   getClientSecretLabel(provider) {
+    if (this.isWebSearchApiKeyProvider(provider)) {
+      return Setting.getLabel(i18next.t("provider:API key"), i18next.t("provider:API key - Tooltip"));
+    }
     if (["Storage", "Embedding", "Text-to-Speech", "Speech-to-Text"].includes(provider.category)) {
       if (provider.type === "Baidu Cloud") {
         return Setting.getLabel(i18next.t("general:Access secret"), i18next.t("general:Access secret - Tooltip"));
@@ -174,6 +180,49 @@ class ProviderEditPage extends React.Component {
       }
     }
     return Setting.getLabel(i18next.t("provider:Client secret"), i18next.t("provider:Client secret - Tooltip"));
+  }
+
+  isGoogleWebSearchProvider(provider) {
+    return provider.category === "Tool" && provider.type === "WebSearch" && provider.subType === "Google";
+  }
+
+  isWebSearchApiKeyProvider(provider) {
+    return provider.category === "Tool" && provider.type === "WebSearch" && ["Google", "Baidu"].includes(provider.subType);
+  }
+
+  shouldShowClientIdInput(provider) {
+    if ((provider.category === "Private Cloud" && provider.type === "Kubernetes") || provider.category === "Scan") {
+      return false;
+    }
+    if (this.isGoogleWebSearchProvider(provider)) {
+      return true;
+    }
+    if (provider.category === "Tool") {
+      return false;
+    }
+    return (
+      ((provider.category === "Embedding" && provider.type === "Baidu Cloud") ||
+        (provider.category === "Embedding" && provider.type === "Tencent Cloud") ||
+        (provider.category === "Storage" && provider.type !== "OpenAI File System")) ||
+      (provider.category === "Blockchain" && !["ChainMaker", "Ethereum"].includes(provider.type)) ||
+      ((provider.category === "Model" || provider.category === "Embedding") && provider.type === "Azure") ||
+      (!(["Storage", "Model", "Embedding", "Text-to-Speech", "Speech-to-Text", "Agent", "Blockchain", "Chat"].includes(provider.category)))
+    );
+  }
+
+  shouldShowClientSecretInput(provider) {
+    if (this.isWebSearchApiKeyProvider(provider)) {
+      return true;
+    }
+    return !(
+      (provider.category === "Storage" && provider.type !== "OpenAI File System") ||
+      (provider.category === "Agent" && provider.type === "MCP") ||
+      (provider.category === "Blockchain" && provider.type === "ChainMaker") ||
+      provider.category === "Scan" ||
+      provider.category === "Tool" ||
+      provider.type === "Dummy" ||
+      provider.type === "Ollama"
+    );
   }
 
   getContractNameLabel(provider) {
@@ -525,7 +574,7 @@ class ProviderEditPage extends React.Component {
           </Col>
         </Row>
         {
-          !["Model", "Embedding", "Agent", "Text-to-Speech", "Speech-to-Text", "Bot"].includes(this.state.provider.category) ? null : (
+          !["Model", "Embedding", "Agent", "Tool", "Text-to-Speech", "Speech-to-Text", "Bot"].includes(this.state.provider.category) ? null : (
             <Row style={{marginTop: "20px"}} >
               <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
                 {Setting.getLabel(i18next.t("provider:Sub type"), i18next.t("provider:Sub type - Tooltip"))} :
@@ -585,27 +634,18 @@ class ProviderEditPage extends React.Component {
           )
         }
         {
-          !(this.state.provider.category === "Private Cloud" && this.state.provider.type === "Kubernetes") &&
-          this.state.provider.category !== "Scan" &&
-          (
-            ((this.state.provider.category === "Embedding" && this.state.provider.type === "Baidu Cloud") ||
-              (this.state.provider.category === "Embedding" && this.state.provider.type === "Tencent Cloud") ||
-              (this.state.provider.category === "Storage" && this.state.provider.type !== "OpenAI File System")) ||
-            (this.state.provider.category === "Blockchain" && !["ChainMaker", "Ethereum"].includes(this.state.provider.type)) ||
-            ((this.state.provider.category === "Model" || this.state.provider.category === "Embedding") && this.state.provider.type === "Azure") ||
-            (!(["Storage", "Model", "Embedding", "Text-to-Speech", "Speech-to-Text", "Agent", "Blockchain", "Chat"].includes(this.state.provider.category)))
-          ) ? (
-              <Row style={{marginTop: "20px"}} >
-                <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
-                  {this.getClientIdLabel(this.state.provider)} :
-                </Col>
-                <Col span={22} >
-                  <Input disabled={isRemote} value={this.state.provider.clientId} onChange={e => {
-                    this.updateProviderField("clientId", e.target.value);
-                  }} />
-                </Col>
-              </Row>
-            ) : null
+          this.shouldShowClientIdInput(this.state.provider) ? (
+            <Row style={{marginTop: "20px"}} >
+              <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+                {this.getClientIdLabel(this.state.provider)} :
+              </Col>
+              <Col span={22} >
+                <Input disabled={isRemote} value={this.state.provider.clientId} onChange={e => {
+                  this.updateProviderField("clientId", e.target.value);
+                }} />
+              </Col>
+            </Row>
+          ) : null
         }
         {
           this.state.provider.category === "Chat" ? (
@@ -746,26 +786,18 @@ class ProviderEditPage extends React.Component {
           ) : null
         }
         {
-          (
-            (this.state.provider.category === "Storage" && this.state.provider.type !== "OpenAI File System") ||
-            (this.state.provider.category === "Agent" && this.state.provider.type === "MCP") ||
-            (this.state.provider.category === "Blockchain" && this.state.provider.type === "ChainMaker") ||
-            this.state.provider.category === "Scan" ||
-            this.state.provider.category === "Tool" ||
-            this.state.provider.type === "Dummy" ||
-            this.state.provider.type === "Ollama"
-          ) ? null : (
-              <Row style={{marginTop: "20px"}} >
-                <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
-                  {this.getClientSecretLabel(this.state.provider)} :
-                </Col>
-                <Col span={22} >
-                  <Input.Password disabled={isRemote} value={this.state.provider.clientSecret} onChange={e => {
-                    this.updateProviderField("clientSecret", e.target.value);
-                  }} />
-                </Col>
-              </Row>
-            )
+          this.shouldShowClientSecretInput(this.state.provider) ? (
+            <Row style={{marginTop: "20px"}} >
+              <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+                {this.getClientSecretLabel(this.state.provider)} :
+              </Col>
+              <Col span={22} >
+                <Input.Password disabled={isRemote} value={this.state.provider.clientSecret} onChange={e => {
+                  this.updateProviderField("clientSecret", e.target.value);
+                }} />
+              </Col>
+            </Row>
+          ) : null
         }
         {
           (this.state.provider.category === "Model" && this.state.provider.type === "Claude" && Setting.getThinkingModelMaxTokens(this.state.provider.subType) !== 0) ? (

@@ -34,7 +34,7 @@ func buildMergedBuiltinRegistry(store *Store, lang string) *builtin_tool.ToolReg
 		if err != nil || p == nil || p.Category != "Tool" {
 			continue
 		}
-		tp, err := tool.NewProvider(p.Category, p.Type, lang)
+		tp, err := tool.NewProvider(getToolProviderConfig(p), lang)
 		if err != nil {
 			continue
 		}

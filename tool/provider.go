@@ -26,17 +26,27 @@ type Provider interface {
 	BuiltinTools() []builtin_tool.BuiltinTool
 }
 
+// ProviderConfig contains the Provider fields needed to construct builtin tools.
+type ProviderConfig struct {
+	Category     string
+	Type         string
+	SubType      string
+	ProviderUrl  string
+	ClientId     string
+	ClientSecret string
+}
+
 // NewProvider instantiates a Tool provider implementation from category and type.
-func NewProvider(category string, typ string, lang string) (Provider, error) {
-	if category != "Tool" {
-		return nil, fmt.Errorf(i18n.Translate(lang, "tool:expected category Tool, got %s"), category)
+func NewProvider(config ProviderConfig, lang string) (Provider, error) {
+	if config.Category != "Tool" {
+		return nil, fmt.Errorf(i18n.Translate(lang, "tool:expected category Tool, got %s"), config.Category)
 	}
-	switch typ {
+	switch config.Type {
 	case "Time":
 		return &TimeProvider{}, nil
 	case "WebSearch":
-		return &WebSearchProvider{}, nil
+		return NewWebSearchProvider(config)
 	default:
-		return nil, fmt.Errorf(i18n.Translate(lang, "tool:unsupported tool provider type: %s"), typ)
+		return nil, fmt.Errorf(i18n.Translate(lang, "tool:unsupported tool provider type: %s"), config.Type)
 	}
 }
