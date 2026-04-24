@@ -46,6 +46,8 @@ func NewProvider(config ProviderConfig, lang string) (Provider, error) {
 		return &TimeProvider{}, nil
 	case "WebSearch":
 		return NewWebSearchProvider(config)
+	case "Shell":
+		return &ShellProvider{}, nil
 	default:
 		return nil, fmt.Errorf(i18n.Translate(lang, "tool:unsupported tool provider type: %s"), config.Type)
 	}

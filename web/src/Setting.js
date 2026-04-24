@@ -1064,6 +1064,10 @@ export function getOtherProviderInfo() {
         logo: `${StaticBaseUrl}/img/social_mcp.png`,
         url: "https://github.com/casibase/casibase",
       },
+      "Shell": {
+        logo: `${StaticBaseUrl}/img/social_mcp.png`,
+        url: "https://github.com/casibase/casibase",
+      },
     },
     "Public Cloud": {
       "Aliyun": {
@@ -1382,6 +1386,7 @@ export function getProviderTypeOptions(category) {
     return [
       {id: "Time", name: "Time"},
       {id: "WebSearch", name: "WebSearch"},
+      {id: "Shell", name: "Shell"},
     ];
   } else if (category === "Public Cloud") {
     return ([
@@ -2133,6 +2138,10 @@ export function getProviderSubTypeOptions(category, type) {
         {id: "Bing", name: "Bing"},
         {id: "Google", name: "Google"},
         {id: "Baidu", name: "Baidu"},
+      ];
+    } else if (type === "Shell") {
+      return [
+        {id: "Default", name: "Default"},
       ];
     }
   } else if (category === "Text-to-Speech") {

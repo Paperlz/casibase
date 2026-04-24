@@ -542,6 +542,8 @@ class ProviderEditPage extends React.Component {
               } else if (this.state.provider.category === "Tool") {
                 if (value === "Time" || value === "WebSearch") {
                   this.updateProviderField("subType", "Default");
+                } else if (value === "Shell") {
+                  this.updateProviderField("subType", "Default");
                 }
               } else if (this.state.provider.category === "Text-to-Speech") {
                 if (value === "Alibaba Cloud") {
@@ -1222,6 +1224,7 @@ class ProviderEditPage extends React.Component {
           provider={this.state.provider}
           originalProvider={this.state.originalProvider}
           onUpdateProvider={this.updateProviderField.bind(this)}
+          account={this.props.account}
         />
         <TestMcpWidget
           provider={this.state.provider}
