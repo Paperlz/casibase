@@ -540,8 +540,10 @@ class ProviderEditPage extends React.Component {
                   this.updateProviderField("subType", "Default");
                 }
               } else if (this.state.provider.category === "Tool") {
-                if (value === "Time" || value === "WebSearch") {
+                if (value === "Time") {
                   this.updateProviderField("subType", "Default");
+                } else if (value === "WebSearch") {
+                  this.updateProviderField("subType", "DuckDuckGo");
                 } else if (value === "Shell") {
                   this.updateProviderField("subType", "Default");
                 }

@@ -2133,7 +2133,6 @@ export function getProviderSubTypeOptions(category, type) {
       ];
     } else if (type === "WebSearch") {
       return [
-        {id: "Default", name: "Default"},
         {id: "DuckDuckGo", name: "DuckDuckGo"},
         {id: "Bing", name: "Bing"},
         {id: "Google", name: "Google"},

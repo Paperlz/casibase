@@ -25,7 +25,7 @@ const {Option} = Select;
 
 const DEFAULT_TOOL_CONTENT = {
   Time: JSON.stringify({tool: "TimeTool", arguments: {operation: "current", timezone: "Asia/Shanghai"}}, null, 2),
-  WebSearch: JSON.stringify({tool: "web_search", arguments: {query: "Casibase web search", count: 3, language: "zh", country: "cn"}}, null, 2),
+  WebSearch: JSON.stringify({tool: "web_search", arguments: {query: "Casibase web search", count: 3, language: "en", country: "us"}}, null, 2),
   Shell: JSON.stringify({tool: "ShellTool", arguments: {command: "echo hello"}}, null, 2),
 };
 

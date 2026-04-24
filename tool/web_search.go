@@ -79,7 +79,6 @@ const (
 type webSearchEngine string
 
 const (
-	webSearchEngineDefault    webSearchEngine = "default"
 	webSearchEngineDuckDuckGo webSearchEngine = "duckduckgo"
 	webSearchEngineBing       webSearchEngine = "bing"
 	webSearchEngineGoogle     webSearchEngine = "google"
@@ -187,13 +186,13 @@ func (t *webSearchBuiltin) GetInputSchema() interface{} {
 			},
 			"language": map[string]interface{}{
 				"type":        "string",
-				"description": "Optional language code for search results, such as en or zh. Default is zh.",
-				"default":     "zh",
+				"description": "Optional language code for search results, such as en or zh. Default is en.",
+				"default":     "en",
 			},
 			"country": map[string]interface{}{
 				"type":        "string",
-				"description": "Optional country or region code for search results, such as us or cn. Default is cn.",
-				"default":     "cn",
+				"description": "Optional country or region code for search results, such as us or cn. Default is us.",
+				"default":     "us",
 			},
 		},
 		"required": []string{"query"},
@@ -246,8 +245,8 @@ func parseWebSearchArguments(arguments map[string]interface{}) (webSearchParams,
 	return webSearchParams{
 		Query:    query,
 		Count:    readWebSearchCount(arguments["count"]),
-		Language: readWebSearchString(arguments, "language", "zh"),
-		Country:  readWebSearchString(arguments, "country", "cn"),
+		Language: readWebSearchString(arguments, "language", "en"),
+		Country:  readWebSearchString(arguments, "country", "us"),
 	}, nil
 }
 
@@ -308,29 +307,14 @@ func (t *webSearchBuiltin) runWebSearch(ctx context.Context, params webSearchPar
 			return nil, "", err
 		}
 		return results, "baidu", nil
+	default:
+		return nil, "", fmt.Errorf("unsupported web search engine: %s", t.engine)
 	}
-
-	duckDuckGoResults, duckDuckGoErr := runDuckDuckGoSearch(ctx, params)
-	if duckDuckGoErr == nil && len(duckDuckGoResults) > 0 {
-		return duckDuckGoResults, "duckduckgo", nil
-	}
-
-	bingResults, bingErr := runBingSearch(ctx, params)
-	if bingErr == nil && len(bingResults) > 0 {
-		return bingResults, "bing", nil
-	}
-
-	if duckDuckGoErr != nil && bingErr != nil {
-		return nil, "", fmt.Errorf("duckduckgo: %v; bing: %v", duckDuckGoErr, bingErr)
-	}
-	return nil, "", fmt.Errorf("no search results found")
 }
 
 func parseWebSearchEngine(value string) (webSearchEngine, error) {
 	switch strings.TrimSpace(value) {
-	case "", "Default":
-		return webSearchEngineDefault, nil
-	case "DuckDuckGo":
+	case "", "DuckDuckGo":
 		return webSearchEngineDuckDuckGo, nil
 	case "Bing":
 		return webSearchEngineBing, nil
