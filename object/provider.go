@@ -33,6 +33,7 @@ import (
 	"github.com/the-open-agent/openagent/tool"
 	"github.com/the-open-agent/openagent/tts"
 	"github.com/the-open-agent/openagent/util"
+	"xorm.io/builder"
 	"xorm.io/core"
 	"xorm.io/xorm"
 )
@@ -82,6 +83,7 @@ type Provider struct {
 	Chain          string `xorm:"varchar(100)" json:"chain"`
 	TestContent    string `xorm:"varchar(500)" json:"testContent"`
 	ModelProvider  string `xorm:"varchar(100)" json:"modelProvider"`
+	Store          string `xorm:"varchar(100)" json:"store"`
 
 	// New fields for unified scan widget (for Scan category providers)
 	TargetMode    string `xorm:"varchar(100)" json:"targetMode"`    // "Manual Input" or "Asset"
@@ -526,10 +528,7 @@ func GetProviderCount(owner, storeName, field, value string) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		providerNames := collectProviderNames(store)
-		if len(providerNames) > 0 {
-			session = session.In("name", providerNames)
-		}
+		session = applyStoreProviderFilter(session, store)
 	}
 	count, err := session.Count(&Provider{})
 	if err != nil {
@@ -582,6 +581,9 @@ func collectProviderNames(store *Store) []string {
 	if store.AgentProvider != "" {
 		providerNames = append(providerNames, store.AgentProvider)
 	}
+	if store.ChatProviders != nil {
+		providerNames = append(providerNames, store.ChatProviders...)
+	}
 	if store.ToolProviders != nil {
 		providerNames = append(providerNames, store.ToolProviders...)
 	}
@@ -610,10 +612,7 @@ func buildRemoteProviderSession(owner, field, value, storeName string) (*xorm.Se
 		if err != nil {
 			return nil, err
 		}
-		providerNames := collectProviderNames(store)
-		if len(providerNames) > 0 {
-			session = session.In("name", providerNames)
-		}
+		session = applyStoreProviderFilter(session, store)
 	}
 	return session, nil
 }
@@ -627,10 +626,7 @@ func GetPaginationProviders(owner, storeName string, offset, limit int, field, v
 		if err != nil {
 			return providers, err
 		}
-		providerNames := collectProviderNames(store)
-		if len(providerNames) > 0 {
-			session = session.In("name", providerNames)
-		}
+		session = applyStoreProviderFilter(session, store)
 	}
 
 	err := session.Find(&providers)
@@ -684,6 +680,19 @@ func GetPaginationProviders(owner, storeName string, offset, limit int, field, v
 	}
 
 	return providers, nil
+}
+
+func applyStoreProviderFilter(session *xorm.Session, store *Store) *xorm.Session {
+	if store == nil {
+		return session.And("1 = 0")
+	}
+
+	providerNames := collectProviderNames(store)
+	if len(providerNames) == 0 {
+		return session.And("1 = 0")
+	}
+
+	return session.And(builder.In("name", providerNames))
 }
 
 func RefreshMcpTools(provider *Provider) error {

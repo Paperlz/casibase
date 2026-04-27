@@ -63,6 +63,7 @@ class ProviderListPage extends BaseListPage {
       compatibleProvider: "",
       contractName: "",
       contractMethod: "",
+      store: "",
       state: "Active",
       isRemote: false,
     };

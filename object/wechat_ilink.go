@@ -80,9 +80,8 @@ var (
 		lang:    "en",
 	}
 
-	weChatIlinkAnswerFunc = func(modelProvider string, question string, lang string) (string, error) {
-		answer, _, err := GetAnswer(modelProvider, question, lang)
-		return answer, err
+	weChatIlinkAnswerFunc = func(provider *Provider, message *chat.WeChatIlinkMessage, question string, lang string) (string, error) {
+		return AnswerWeChatIlinkMessage(provider, message, question, lang)
 	}
 )
 
@@ -394,7 +393,7 @@ func (p *weChatIlinkPoller) runOnce(lang string) bool {
 		if !ok {
 			continue
 		}
-		answer, err := weChatIlinkAnswerFunc(provider.ModelProvider, text, lang)
+		answer, err := weChatIlinkAnswerFunc(provider, message, text, lang)
 		if err != nil {
 			answer = fmt.Sprintf("Error: %v", err)
 		}

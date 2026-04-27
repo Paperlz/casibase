@@ -42,7 +42,7 @@ func NewProvider(config ProviderConfig, lang string) (Provider, error) {
 	if config.Category != "Tool" {
 		return nil, fmt.Errorf(i18n.Translate(lang, "tool:expected category Tool, got %s"), config.Category)
 	}
-	switch config.Type {
+	switch normalizeProviderType(config.Type) {
 	case "Time":
 		return &TimeProvider{}, nil
 	case "Web Search":
@@ -57,5 +57,18 @@ func NewProvider(config ProviderConfig, lang string) (Provider, error) {
 		return NewBrowserProvider(config)
 	default:
 		return nil, fmt.Errorf(i18n.Translate(lang, "tool:unsupported tool provider type: %s"), config.Type)
+	}
+}
+
+func normalizeProviderType(typ string) string {
+	switch typ {
+	case "WebSearch":
+		return "Web Search"
+	case "WebFetch":
+		return "Web Fetch"
+	case "WebBrowser":
+		return "Web Browser"
+	default:
+		return typ
 	}
 }

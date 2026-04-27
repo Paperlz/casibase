@@ -159,6 +159,8 @@ class StoreListPage extends BaseListPage {
       textToSpeechProvider: "Browser Built-In",
       speechToTextProvider: "Browser Built-In",
       agentProvider: "",
+      chatProviders: [],
+      toolProviders: [],
       memoryLimit: 5,
       frequency: 10000,
       limitMinutes: 10,
@@ -453,6 +455,18 @@ class StoreListPage extends BaseListPage {
         },
       },
       {
+        title: i18next.t("store:Chat providers"),
+        dataIndex: "chatProviders",
+        key: "chatProviders",
+        width: "280px",
+        render: (arr) => {
+          if (!arr || !arr.length) {
+            return "";
+          }
+          return arr.join(", ");
+        },
+      },
+      {
         title: i18next.t("store:Tool providers"),
         dataIndex: "toolProviders",
         key: "toolProviders",
@@ -550,7 +564,7 @@ class StoreListPage extends BaseListPage {
     if (this.state.hideChat) {
       filteredColumns = filteredColumns.filter(column =>
         column.key !== "chatCount" && column.key !== "messageCount" && column.key !== "vectorCount" && column.key !== "imageProvider" && column.key !== "modelProvider" && column.key !== "embeddingProvider" &&
-        column.key !== "textToSpeechProvider" && column.key !== "speechToTextProvider" && column.key !== "agentProvider" && column.key !== "toolProviders" && column.key !== "memoryLimit"
+        column.key !== "textToSpeechProvider" && column.key !== "speechToTextProvider" && column.key !== "agentProvider" && column.key !== "chatProviders" && column.key !== "toolProviders" && column.key !== "memoryLimit"
       );
     }
 

@@ -71,6 +71,7 @@ type Store struct {
 	EnableTtsStreaming   bool     `xorm:"bool" json:"enableTtsStreaming"`
 	SpeechToTextProvider string   `xorm:"varchar(100)" json:"speechToTextProvider"`
 	AgentProvider        string   `xorm:"varchar(100)" json:"agentProvider"`
+	ChatProviders        []string `xorm:"mediumtext" json:"chatProviders"`
 	ToolProviders        []string `xorm:"mediumtext" json:"toolProviders"`
 	VectorStoreId        string   `xorm:"varchar(100)" json:"vectorStoreId"`
 	BuiltinTools         []string `xorm:"varchar(500)" json:"builtinTools"`
@@ -258,6 +259,9 @@ func UpdateStore(id string, store *Store) (bool, error) {
 	if store == nil {
 		return false, nil
 	}
+	if err = syncWeChatIlinkStoreBindings(store); err != nil {
+		return false, err
+	}
 
 	_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(store)
 	if err != nil {
@@ -269,12 +273,95 @@ func UpdateStore(id string, store *Store) (bool, error) {
 }
 
 func AddStore(store *Store) (bool, error) {
+	if err := syncWeChatIlinkStoreBindings(store); err != nil {
+		return false, err
+	}
+
 	affected, err := adapter.engine.Insert(store)
 	if err != nil {
 		return false, err
 	}
 
 	return affected != 0, nil
+}
+
+func syncWeChatIlinkStoreBindings(store *Store) error {
+	if store == nil {
+		return nil
+	}
+
+	store.ChatProviders = uniqueNonEmptyStrings(store.ChatProviders)
+	if len(store.ChatProviders) == 0 {
+		return nil
+	}
+
+	selectedProviders := map[string]bool{}
+	for _, provider := range store.ChatProviders {
+		selectedProviders[provider] = true
+	}
+
+	stores := []*Store{}
+	if err := adapter.engine.Find(&stores); err != nil {
+		return err
+	}
+
+	for _, otherStore := range stores {
+		if otherStore.Owner == store.Owner && otherStore.Name == store.Name {
+			continue
+		}
+
+		nextChatProviders, changed := removeSelectedStrings(otherStore.ChatProviders, selectedProviders)
+		if !changed {
+			continue
+		}
+
+		_, err := adapter.engine.ID(core.PK{otherStore.Owner, otherStore.Name}).Cols("chat_providers").Update(&Store{
+			ChatProviders: nextChatProviders,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	res := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		res = append(res, value)
+	}
+	return res
+}
+
+func removeSelectedStrings(values []string, selected map[string]bool) ([]string, bool) {
+	res := []string{}
+	seen := map[string]bool{}
+	changed := false
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			changed = true
+			continue
+		}
+		if selected[value] {
+			changed = true
+			continue
+		}
+		if seen[value] {
+			changed = true
+			continue
+		}
+		seen[value] = true
+		res = append(res, value)
+	}
+	return res, changed
 }
 
 func DeleteStore(store *Store) (bool, error) {

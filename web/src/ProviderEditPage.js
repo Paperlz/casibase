@@ -90,9 +90,10 @@ class ProviderEditPage extends React.Component {
     ProviderBackend.getProvider("admin", this.state.providerName)
       .then((res) => {
         if (res.status === "ok") {
+          const provider = res.data;
           this.setState({
-            provider: res.data,
-            originalProvider: Setting.deepCopy(res.data),
+            provider: provider,
+            originalProvider: Setting.deepCopy(provider),
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
@@ -440,6 +441,7 @@ class ProviderEditPage extends React.Component {
                 this.updateProviderField("subType", "WeCom Bot");
               } else if (value === "Chat") {
                 this.updateProviderField("type", "Telegram");
+                this.updateProviderField("subType", "");
               } else if (value === "Scan") {
                 this.updateProviderField("type", "Nmap");
                 this.updateProviderField("subType", "Default");
@@ -683,27 +685,6 @@ class ProviderEditPage extends React.Component {
               <Col span={22} >
                 <Select virtual={false} disabled={isRemote} style={{width: "100%"}} value={this.state.provider.clientId}
                   onChange={(value) => this.updateProviderField("clientId", value)}
-                  onDropdownVisibleChange={(open) => {if (open) {this.getModelProviders();}}}
-                  showSearch
-                  filterOption={(input, option) =>
-                    option.children[1].toLowerCase().includes(input.toLowerCase())
-                  }
-                >
-                  {this.state.modelProviders.map((provider, index) => this.renderModelProviderOption(provider, index))}
-                </Select>
-              </Col>
-            </Row>
-          ) : null
-        }
-        {
-          (this.state.provider.category === "Chat" && this.state.provider.type === "WeChat iLink Bot") ? (
-            <Row style={{marginTop: "20px"}} >
-              <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
-                {Setting.getLabel(i18next.t("provider:Model provider"), i18next.t("provider:Model provider - Tooltip"))} :
-              </Col>
-              <Col span={22} >
-                <Select virtual={false} disabled={isRemote} style={{width: "100%"}} value={this.state.provider.modelProvider}
-                  onChange={(value) => this.updateProviderField("modelProvider", value)}
                   onDropdownVisibleChange={(open) => {if (open) {this.getModelProviders();}}}
                   showSearch
                   filterOption={(input, option) =>

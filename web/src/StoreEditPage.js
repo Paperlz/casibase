@@ -49,6 +49,7 @@ class StoreEditPage extends React.Component {
       textToSpeechProviders: [],
       speechToTextProviders: [],
       agentProviders: [],
+      chatProviderOptions: [],
       toolProvidersProviders: [],
       builtinTools: [],
       enableTtsStreaming: false,
@@ -156,6 +157,7 @@ class StoreEditPage extends React.Component {
             textToSpeechProviders: res.data.filter(provider => provider.category === "Text-to-Speech"),
             speechToTextProviders: res.data.filter(provider => provider.category === "Speech-to-Text"),
             agentProviders: res.data.filter(provider => provider.category === "Agent"),
+            chatProviderOptions: res.data.filter(provider => provider.category === "Chat" && provider.type === "WeChat iLink Bot"),
             toolProvidersProviders: res.data.filter(provider => provider.category === "Tool"),
           });
         } else {
@@ -513,6 +515,26 @@ class StoreEditPage extends React.Component {
                   <Option key="Empty" value="">{i18next.t("general:empty")}</Option>
                   {
                     this.state.agentProviders.map((provider, index) => this.renderProviderOption(provider, index))
+                  }
+                </Select>
+              </Col>
+            </Row>
+            <Row style={{marginTop: "20px"}} >
+              <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+                {Setting.getLabel(i18next.t("store:Chat providers"), i18next.t("store:Chat providers - Tooltip"))} :
+              </Col>
+              <Col span={22} >
+                <Select
+                  virtual={false}
+                  mode="multiple"
+                  allowClear
+                  style={{width: "100%"}}
+                  placeholder={i18next.t("store:Select chat providers")}
+                  value={this.state.store.chatProviders || []}
+                  onChange={(value => {this.updateStoreField("chatProviders", value || []);})}
+                >
+                  {
+                    this.state.chatProviderOptions.map((provider, index) => this.renderProviderOption(provider, index))
                   }
                 </Select>
               </Col>
