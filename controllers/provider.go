@@ -263,6 +263,108 @@ func (c *ApiController) WaitWeChatIlinkLogin() {
 	c.ResponseOk(result)
 }
 
+// StartWeChatIlinkTest starts a WeChat iLink Bot manual reply test session.
+// @Title StartWeChatIlinkTest
+// @Tag Provider API
+// @Description start a manual reply test session for a logged-in WeChat iLink Bot provider
+// @Param id query string true "The id (owner/name) of the provider"
+// @Success 200 {object} object.WeChatIlinkTestStartResult The Response object
+// @router /start-wechat-ilink-test [post]
+func (c *ApiController) StartWeChatIlinkTest() {
+	if !c.RequireAdmin() {
+		return
+	}
+
+	id := c.Input().Get("id")
+	result, err := object.StartWeChatIlinkTest(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(result)
+}
+
+// WaitWeChatIlinkTest waits for a WeChat iLink Bot manual reply test message.
+// @Title WaitWeChatIlinkTest
+// @Tag Provider API
+// @Description returns the latest user message captured by a WeChat iLink Bot test session
+// @Param id query string true "The id (owner/name) of the provider"
+// @Param sessionKey query string true "The test session key from start-wechat-ilink-test"
+// @Success 200 {object} object.WeChatIlinkTestWaitResult The Response object
+// @router /wait-wechat-ilink-test [post]
+func (c *ApiController) WaitWeChatIlinkTest() {
+	if !c.RequireAdmin() {
+		return
+	}
+
+	id := c.Input().Get("id")
+	sessionKey := c.Input().Get("sessionKey")
+	result, err := object.WaitWeChatIlinkTest(id, sessionKey)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(result)
+}
+
+// ReplyWeChatIlinkTest sends a manual reply for the latest WeChat iLink Bot test message.
+// @Title ReplyWeChatIlinkTest
+// @Tag Provider API
+// @Description manually reply to the latest user message captured by a WeChat iLink Bot test session
+// @Param id query string true "The id (owner/name) of the provider"
+// @Param sessionKey query string true "The test session key from start-wechat-ilink-test"
+// @Param body body object.WeChatIlinkTestReplyRequest true "Reply text"
+// @Success 200 {object} controllers.Response The Response object
+// @router /reply-wechat-ilink-test [post]
+func (c *ApiController) ReplyWeChatIlinkTest() {
+	if !c.RequireAdmin() {
+		return
+	}
+
+	id := c.Input().Get("id")
+	sessionKey := c.Input().Get("sessionKey")
+	var request object.WeChatIlinkTestReplyRequest
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &request)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	result, err := object.ReplyWeChatIlinkTest(id, sessionKey, request.Text, request.MessageId)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(result)
+}
+
+// StopWeChatIlinkTest stops a WeChat iLink Bot manual reply test session.
+// @Title StopWeChatIlinkTest
+// @Tag Provider API
+// @Description stop a manual reply test session for a WeChat iLink Bot provider
+// @Param id query string true "The id (owner/name) of the provider"
+// @Param sessionKey query string true "The test session key from start-wechat-ilink-test"
+// @Success 200 {object} controllers.Response The Response object
+// @router /stop-wechat-ilink-test [post]
+func (c *ApiController) StopWeChatIlinkTest() {
+	if !c.RequireAdmin() {
+		return
+	}
+
+	id := c.Input().Get("id")
+	sessionKey := c.Input().Get("sessionKey")
+	result, err := object.StopWeChatIlinkTest(id, sessionKey)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(result)
+}
+
 // TestToolProvider
 // @Title TestToolProvider
 // @Tag Provider API

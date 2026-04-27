@@ -28,6 +28,7 @@ import EmbedTestWidget from "./common/TestEmbedWidget";
 import TestMcpWidget from "./common/TestMcpWidget";
 import TestScanWidget from "./common/TestScanWidget";
 import TestToolWidget from "./common/TestToolWidget";
+import TestWeChatIlinkWidget from "./common/TestWeChatIlinkWidget";
 import Editor from "./common/Editor";
 
 const {Option} = Select;
@@ -367,6 +368,7 @@ class ProviderEditPage extends React.Component {
   renderProvider() {
     const editorWidth = Setting.isMobile() ? 22 : 9;
     const isRemote = this.state.provider.isRemote;
+    const hasUnsavedProviderChanges = JSON.stringify(this.state.originalProvider) !== JSON.stringify(this.state.provider);
     return (
       <Card size="small" title={
         <div>
@@ -1253,6 +1255,10 @@ class ProviderEditPage extends React.Component {
           onUpdateProvider={this.updateProviderField.bind(this)}
           account={this.props.account}
         />
+        <TestWeChatIlinkWidget
+          provider={this.state.provider}
+          shouldSaveProviderFirst={this.state.isNewProvider || hasUnsavedProviderChanges}
+        />
         <TestMcpWidget
           provider={this.state.provider}
           originalProvider={this.state.originalProvider}
@@ -1318,9 +1324,16 @@ class ProviderEditPage extends React.Component {
                   {Setting.getLabel(i18next.t("provider:QR login"), i18next.t("provider:QR login - Tooltip"))} :
                 </Col>
                 <Col span={22} >
-                  <Button disabled={isRemote} type="primary" loading={this.state.weChatIlinkLoginLoading} onClick={() => this.startWeChatIlinkLogin()}>
+                  <Button disabled={isRemote || this.state.isNewProvider || hasUnsavedProviderChanges} type="primary" loading={this.state.weChatIlinkLoginLoading} onClick={() => this.startWeChatIlinkLogin()}>
                     {i18next.t("provider:Login with QR code")}
                   </Button>
+                  {
+                    (this.state.isNewProvider || hasUnsavedProviderChanges) ? (
+                      <span style={{marginLeft: "10px", color: "#999"}}>
+                        {i18next.t("provider:Save provider before QR login")}
+                      </span>
+                    ) : null
+                  }
                   {
                     this.state.weChatIlinkQrcodeUrl !== "" ? (
                       <div style={{marginTop: "20px"}}>
@@ -1631,6 +1644,7 @@ class ProviderEditPage extends React.Component {
             Setting.showMessage("success", i18next.t("general:Successfully saved"));
             this.setState({
               providerName: this.state.provider.name,
+              originalProvider: Setting.deepCopy(this.state.provider),
               isNewProvider: false,
             });
 

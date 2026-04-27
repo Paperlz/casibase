@@ -64,7 +64,9 @@ func permissionFilter(ctx *context.Context) {
 	disablePreviewMode, _ := beego.AppConfig.Bool("disablePreviewMode")
 
 	isUpdateRequest := strings.HasPrefix(controllerName, "update-") || strings.HasPrefix(controllerName, "add-") || strings.HasPrefix(controllerName, "delete-") || strings.HasPrefix(controllerName, "refresh-") || strings.HasPrefix(controllerName, "deploy-") ||
-		controllerName == "start-wechat-ilink-login" || controllerName == "wait-wechat-ilink-login"
+		controllerName == "start-wechat-ilink-login" || controllerName == "wait-wechat-ilink-login" ||
+		controllerName == "start-wechat-ilink-test" || controllerName == "wait-wechat-ilink-test" ||
+		controllerName == "reply-wechat-ilink-test" || controllerName == "stop-wechat-ilink-test"
 	isGetRequest := strings.HasPrefix(controllerName, "get-")
 
 	if !disablePreviewMode && isGetRequest {

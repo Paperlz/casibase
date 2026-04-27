@@ -38,6 +38,7 @@ const (
 	weChatIlinkClientVersion = "131335"
 	weChatIlinkChannel       = "openagent"
 	weChatIlinkMessageText   = 1
+	weChatIlinkMessageUser   = 1
 	weChatIlinkMessageBot    = 2
 	weChatIlinkMessageFinish = 2
 )
@@ -236,6 +237,13 @@ func (m *WeChatIlinkMessage) Text() (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func (m *WeChatIlinkMessage) IsFinishedUserMessage() bool {
+	return m != nil &&
+		m.MessageType == weChatIlinkMessageUser &&
+		m.MessageState == weChatIlinkMessageFinish &&
+		strings.TrimSpace(m.FromUserId) != ""
 }
 
 func (c *WeChatIlinkClient) doGet(endpoint string, target interface{}) error {

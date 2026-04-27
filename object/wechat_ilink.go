@@ -30,6 +30,7 @@ import (
 
 const (
 	weChatIlinkLoginSessionTtl = 5 * time.Minute
+	weChatIlinkTestSessionTtl  = 10 * time.Minute
 	weChatIlinkRetryDelay      = 2 * time.Second
 	weChatIlinkErrorDelay      = 30 * time.Second
 	weChatIlinkDefaultTimeout  = 35_000
@@ -50,11 +51,43 @@ type WeChatIlinkLoginWaitResult struct {
 	Message   string `json:"message"`
 }
 
+type WeChatIlinkTestStartResult struct {
+	SessionKey string `json:"sessionKey"`
+}
+
+type WeChatIlinkTestWaitResult struct {
+	HasMessage   bool   `json:"hasMessage"`
+	FromUserId   string `json:"fromUserId"`
+	Text         string `json:"text"`
+	MessageId    int64  `json:"messageId"`
+	CreateTimeMs int64  `json:"createTimeMs"`
+}
+
+type WeChatIlinkTestReplyRequest struct {
+	Text      string `json:"text"`
+	MessageId int64  `json:"messageId"`
+}
+
 type weChatIlinkLoginSession struct {
 	ProviderId     string
 	Qrcode         string
 	CurrentBaseUrl string
 	StartedAt      time.Time
+}
+
+type weChatIlinkTestMessage struct {
+	FromUserId   string
+	ContextToken string
+	Text         string
+	MessageId    int64
+	CreateTimeMs int64
+}
+
+type weChatIlinkTestSession struct {
+	ProviderId  string
+	StartedAt   time.Time
+	ExpiresAt   time.Time
+	LastMessage *weChatIlinkTestMessage
 }
 
 type weChatIlinkPoller struct {
@@ -75,6 +108,9 @@ var (
 	weChatIlinkLoginMutex    sync.Mutex
 	weChatIlinkLoginSessions = map[string]*weChatIlinkLoginSession{}
 
+	weChatIlinkTestMutex    sync.Mutex
+	weChatIlinkTestSessions = map[string]*weChatIlinkTestSession{}
+
 	defaultWeChatIlinkPollerManager = &WeChatIlinkPollerManager{
 		pollers: map[string]*weChatIlinkPoller{},
 		lang:    "en",
@@ -82,6 +118,11 @@ var (
 
 	weChatIlinkAnswerFunc = func(provider *Provider, message *chat.WeChatIlinkMessage, question string, lang string) (string, error) {
 		return AnswerWeChatIlinkMessage(provider, message, question, lang)
+	}
+
+	weChatIlinkSendTextMessageFunc = func(baseUrl string, token string, toUserId string, contextToken string, text string) error {
+		client := chat.NewWeChatIlinkClient(baseUrl, token, nil)
+		return client.SendTextMessage(toUserId, contextToken, text)
 	}
 )
 
@@ -197,6 +238,100 @@ func WaitWeChatIlinkLogin(id string, sessionKey string) (*WeChatIlinkLoginWaitRe
 	}, nil
 }
 
+func StartWeChatIlinkTest(id string) (*WeChatIlinkTestStartResult, error) {
+	provider, err := GetProvider(id)
+	if err != nil {
+		return nil, err
+	}
+	if !IsWeChatIlinkProvider(provider) {
+		return nil, fmt.Errorf("provider is not a WeChat iLink Bot Chat provider")
+	}
+	if provider.State != "Active" {
+		return nil, fmt.Errorf("WeChat iLink Bot provider should be active before testing")
+	}
+	if strings.TrimSpace(provider.ClientSecret) == "" || strings.TrimSpace(provider.ProviderUrl) == "" {
+		return nil, fmt.Errorf("WeChat iLink Bot is not logged in")
+	}
+
+	if !defaultWeChatIlinkPollerManager.IsRunning(id) {
+		defaultWeChatIlinkPollerManager.Start(id)
+	}
+
+	sessionKey := util.GenerateId()
+	now := time.Now()
+	weChatIlinkTestMutex.Lock()
+	defer weChatIlinkTestMutex.Unlock()
+	cleanupExpiredWeChatIlinkTestSessionsLocked(now)
+	deleteWeChatIlinkTestSessionsByProviderLocked(id)
+	weChatIlinkTestSessions[sessionKey] = &weChatIlinkTestSession{
+		ProviderId: id,
+		StartedAt:  now,
+		ExpiresAt:  now.Add(weChatIlinkTestSessionTtl),
+	}
+
+	return &WeChatIlinkTestStartResult{SessionKey: sessionKey}, nil
+}
+
+func WaitWeChatIlinkTest(id string, sessionKey string) (*WeChatIlinkTestWaitResult, error) {
+	message, err := getWeChatIlinkTestMessage(id, sessionKey)
+	if err != nil {
+		return nil, err
+	}
+	if message == nil {
+		return &WeChatIlinkTestWaitResult{HasMessage: false}, nil
+	}
+
+	return &WeChatIlinkTestWaitResult{
+		HasMessage:   true,
+		FromUserId:   message.FromUserId,
+		Text:         message.Text,
+		MessageId:    message.MessageId,
+		CreateTimeMs: message.CreateTimeMs,
+	}, nil
+}
+
+func ReplyWeChatIlinkTest(id string, sessionKey string, text string, messageId int64) (bool, error) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false, fmt.Errorf("WeChat iLink test reply text should not be empty")
+	}
+
+	message, err := getWeChatIlinkTestReplyMessage(id, sessionKey, messageId)
+	if err != nil {
+		return false, err
+	}
+
+	provider, err := GetProvider(id)
+	if err != nil {
+		return false, err
+	}
+	if !IsWeChatIlinkProvider(provider) {
+		return false, fmt.Errorf("provider is not a WeChat iLink Bot Chat provider")
+	}
+	if strings.TrimSpace(provider.ClientSecret) == "" || strings.TrimSpace(provider.ProviderUrl) == "" {
+		return false, fmt.Errorf("WeChat iLink Bot is not logged in")
+	}
+
+	err = weChatIlinkSendTextMessageFunc(provider.ProviderUrl, provider.ClientSecret, message.FromUserId, message.ContextToken, text)
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func StopWeChatIlinkTest(id string, sessionKey string) (bool, error) {
+	weChatIlinkTestMutex.Lock()
+	defer weChatIlinkTestMutex.Unlock()
+
+	session := weChatIlinkTestSessions[sessionKey]
+	if session == nil || session.ProviderId != id {
+		return false, fmt.Errorf("WeChat iLink test session not found")
+	}
+	delete(weChatIlinkTestSessions, sessionKey)
+	return true, nil
+}
+
 func getWeChatIlinkLoginSession(id string, sessionKey string) (*weChatIlinkLoginSession, error) {
 	weChatIlinkLoginMutex.Lock()
 	defer weChatIlinkLoginMutex.Unlock()
@@ -240,6 +375,98 @@ func deleteWeChatIlinkLoginSessionsByProviderLocked(providerId string) {
 	for sessionKey, session := range weChatIlinkLoginSessions {
 		if session != nil && session.ProviderId == providerId {
 			delete(weChatIlinkLoginSessions, sessionKey)
+		}
+	}
+}
+
+func getWeChatIlinkTestMessage(id string, sessionKey string) (*weChatIlinkTestMessage, error) {
+	weChatIlinkTestMutex.Lock()
+	defer weChatIlinkTestMutex.Unlock()
+
+	now := time.Now()
+	cleanupExpiredWeChatIlinkTestSessionsLocked(now)
+	session := weChatIlinkTestSessions[sessionKey]
+	if session == nil || session.ProviderId != id {
+		return nil, fmt.Errorf("WeChat iLink test session not found")
+	}
+	return cloneWeChatIlinkTestMessage(session.LastMessage), nil
+}
+
+func getWeChatIlinkTestReplyMessage(id string, sessionKey string, messageId int64) (*weChatIlinkTestMessage, error) {
+	if messageId == 0 {
+		return nil, fmt.Errorf("WeChat iLink test message id should not be empty")
+	}
+
+	weChatIlinkTestMutex.Lock()
+	defer weChatIlinkTestMutex.Unlock()
+
+	now := time.Now()
+	cleanupExpiredWeChatIlinkTestSessionsLocked(now)
+	session := weChatIlinkTestSessions[sessionKey]
+	if session == nil || session.ProviderId != id {
+		return nil, fmt.Errorf("WeChat iLink test session not found")
+	}
+	if session.LastMessage == nil {
+		return nil, fmt.Errorf("WeChat iLink test has not received a user message")
+	}
+	if session.LastMessage.MessageId != messageId {
+		return nil, fmt.Errorf("WeChat iLink test message has changed, please reply to the latest message")
+	}
+	return cloneWeChatIlinkTestMessage(session.LastMessage), nil
+}
+
+func cloneWeChatIlinkTestMessage(message *weChatIlinkTestMessage) *weChatIlinkTestMessage {
+	if message == nil {
+		return nil
+	}
+	return &weChatIlinkTestMessage{
+		FromUserId:   message.FromUserId,
+		ContextToken: message.ContextToken,
+		Text:         message.Text,
+		MessageId:    message.MessageId,
+		CreateTimeMs: message.CreateTimeMs,
+	}
+}
+
+func captureWeChatIlinkTestMessage(providerId string, message *chat.WeChatIlinkMessage, text string) bool {
+	weChatIlinkTestMutex.Lock()
+	defer weChatIlinkTestMutex.Unlock()
+
+	now := time.Now()
+	cleanupExpiredWeChatIlinkTestSessionsLocked(now)
+	for _, session := range weChatIlinkTestSessions {
+		if session != nil && session.ProviderId == providerId {
+			session.LastMessage = &weChatIlinkTestMessage{
+				FromUserId:   message.FromUserId,
+				ContextToken: message.ContextToken,
+				Text:         text,
+				MessageId:    message.MessageId,
+				CreateTimeMs: message.CreateTimeMs,
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func cleanupExpiredWeChatIlinkTestSessionsLocked(now time.Time) {
+	for sessionKey, session := range weChatIlinkTestSessions {
+		if session == nil || now.After(session.ExpiresAt) {
+			delete(weChatIlinkTestSessions, sessionKey)
+		}
+	}
+}
+
+func deleteWeChatIlinkTestSessionsByProvider(providerId string) {
+	weChatIlinkTestMutex.Lock()
+	defer weChatIlinkTestMutex.Unlock()
+	deleteWeChatIlinkTestSessionsByProviderLocked(providerId)
+}
+
+func deleteWeChatIlinkTestSessionsByProviderLocked(providerId string) {
+	for sessionKey, session := range weChatIlinkTestSessions {
+		if session != nil && session.ProviderId == providerId {
+			delete(weChatIlinkTestSessions, sessionKey)
 		}
 	}
 }
@@ -301,6 +528,7 @@ func (m *WeChatIlinkPollerManager) Stop(id string) {
 	if poller != nil {
 		<-poller.doneCh
 	}
+	deleteWeChatIlinkTestSessionsByProvider(id)
 }
 
 func (m *WeChatIlinkPollerManager) IsRunning(id string) bool {
@@ -389,20 +617,34 @@ func (p *weChatIlinkPoller) runOnce(lang string) bool {
 	_ = updateWeChatIlinkProviderRuntime(provider, runtimeConfig, "")
 
 	for _, message := range updates.Messages {
-		text, ok := message.Text()
-		if !ok {
-			continue
-		}
-		answer, err := weChatIlinkAnswerFunc(provider, message, text, lang)
-		if err != nil {
-			answer = fmt.Sprintf("Error: %v", err)
-		}
-		if err = client.SendTextMessage(message.FromUserId, message.ContextToken, answer); err != nil {
+		if err = handleWeChatIlinkMessage(provider, message, lang, client.SendTextMessage); err != nil {
 			_ = updateWeChatIlinkProviderRuntime(provider, nil, err.Error())
 		}
 	}
 
 	return true
+}
+
+type weChatIlinkSendTextFunc func(toUserId string, contextToken string, text string) error
+
+func handleWeChatIlinkMessage(provider *Provider, message *chat.WeChatIlinkMessage, lang string, sendText weChatIlinkSendTextFunc) error {
+	if !message.IsFinishedUserMessage() {
+		return nil
+	}
+
+	text, ok := message.Text()
+	if !ok {
+		return nil
+	}
+	if captureWeChatIlinkTestMessage(provider.GetId(), message, text) {
+		return nil
+	}
+
+	answer, err := weChatIlinkAnswerFunc(provider, message, text, lang)
+	if err != nil {
+		answer = fmt.Sprintf("Error: %v", err)
+	}
+	return sendText(message.FromUserId, message.ContextToken, answer)
 }
 
 func (p *weChatIlinkPoller) sleepOrStop(duration time.Duration) bool {

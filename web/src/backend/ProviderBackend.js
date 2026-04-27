@@ -145,3 +145,44 @@ export function waitWeChatIlinkLogin(id, sessionKey) {
     },
   }).then(res => res.json());
 }
+
+export function startWeChatIlinkTest(id) {
+  return fetch(`${Setting.ServerUrl}/api/start-wechat-ilink-test?id=${encodeURIComponent(id)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => res.json());
+}
+
+export function waitWeChatIlinkTest(id, sessionKey) {
+  return fetch(`${Setting.ServerUrl}/api/wait-wechat-ilink-test?id=${encodeURIComponent(id)}&sessionKey=${encodeURIComponent(sessionKey)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => res.json());
+}
+
+export function replyWeChatIlinkTest(id, sessionKey, text, messageId) {
+  return fetch(`${Setting.ServerUrl}/api/reply-wechat-ilink-test?id=${encodeURIComponent(id)}&sessionKey=${encodeURIComponent(sessionKey)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify({text, messageId}),
+  }).then(res => res.json());
+}
+
+export function stopWeChatIlinkTest(id, sessionKey) {
+  return fetch(`${Setting.ServerUrl}/api/stop-wechat-ilink-test?id=${encodeURIComponent(id)}&sessionKey=${encodeURIComponent(sessionKey)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => res.json());
+}
