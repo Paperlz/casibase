@@ -352,10 +352,17 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 				agentTools = append(agentTools, responses.ToolParamOfWebSearchPreview(responses.WebSearchToolTypeWebSearchPreview))
 			}
 
-			req.Tools = agentTools
-			req.ToolChoice = responses.ResponseNewParamsToolChoiceUnion{
-				OfToolChoiceMode: param.NewOpt(responses.ToolChoiceOptionsAuto),
+			if len(agentTools) > 0 {
+				req.Tools = agentTools
+				toolChoiceMode := responses.ToolChoiceOptionsAuto
+				if getToolChoiceMode(agentInfo) == "required" {
+					toolChoiceMode = responses.ToolChoiceOptionsRequired
+				}
+				req.ToolChoice = responses.ResponseNewParamsToolChoiceUnion{
+					OfToolChoiceMode: param.NewOpt(toolChoiceMode),
+				}
 			}
+			fmt.Printf("[ToolDebug] OpenAI Responses request: model=%s toolCount=%d toolChoice=%s toolNames=%v\n", model, len(agentTools), getToolChoiceMode(agentInfo), getAgentToolDebugNames(agentInfo))
 		}
 
 		respStream := client.Responses.NewStreaming(ctx, req)

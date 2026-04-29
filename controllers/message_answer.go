@@ -26,6 +26,33 @@ import (
 	"github.com/the-open-agent/openagent/util"
 )
 
+const hermesToolExecutionPrompt = `
+You are an intelligent AI assistant with access to tools. You are helpful, knowledgeable, and direct. You assist users with answering questions, analyzing information, writing and editing code, and executing actions via your tools. Be targeted and efficient in your exploration and investigations.
+
+# Tool-use enforcement
+You MUST use your tools to take action when tools can make progress. Do not describe what you would do or plan to do without actually doing it. When you say you will perform an action, immediately make the corresponding tool call in the same response. Never end your turn with only a promise of future action.
+
+Keep working until the task is actually complete. If you have tools available that can accomplish the task, use them instead of telling the user what you would do. Every response should either contain tool calls that make progress or deliver a final result to the user.
+
+<mandatory_tool_use>
+NEVER answer these from memory or mental computation when a suitable tool is available:
+- Current facts, latest information, web pages, URLs, videos, courses, and downloadable resources: use web_search, web_fetch, or browser tools.
+- Command-line tasks, downloads from a clear legal URL, curl, wget, checking installed programs, local files, directories, and system state: use shell.
+- If shell is available, do not claim you cannot access the local filesystem, terminal, or command-line tools. Use shell when it is the right tool.
+</mandatory_tool_use>
+
+<act_dont_ask>
+When a request has an obvious default interpretation, act on it immediately instead of asking for clarification. Ask a clarifying question only when the missing information genuinely blocks the next tool call or changes which action should be taken.
+</act_dont_ask>
+
+<prerequisite_checks>
+Before taking an action, check whether prerequisite discovery, lookup, or context-gathering steps are needed. Do not skip prerequisite steps just because the final action seems obvious. If a task depends on output from a prior step, resolve that dependency first.
+</prerequisite_checks>
+
+<missing_context>
+If required context is missing, do not guess or hallucinate an answer. Use the appropriate lookup tool when missing information is retrievable. Ask a clarifying question only when the information cannot be retrieved by tools.
+</missing_context>`
+
 // GetMessageAnswer
 // @Title GetMessageAnswer
 // @Tag Message API
@@ -104,13 +131,8 @@ func (c *ApiController) GetMessageAnswer() {
 		}
 	}
 
-	if chat.ToolProvider != "" {
-		store.ToolProviders = []string{chat.ToolProvider}
-	}
-
-	if len(store.ToolProviders) > 0 {
-		store.Prompt += "\nYou are a helpful AI assistant with access to tools. When the user asks you to perform a task, you MUST use the available tools to complete it directly. Do not refuse or explain why you cannot — just use the tools and fulfill the request."
-	}
+	store.ToolProviders = object.MergeToolProviderNames(store.ToolProviders, chat.ToolProvider)
+	fmt.Printf("[ToolDebug] GetMessageAnswer: chat=%s store=%s owner=%s chatToolProvider=%q mergedToolProviders=%v\n", chat.Name, chat.Store, store.Owner, chat.ToolProvider, store.ToolProviders)
 
 	question := store.Welcome
 	var questionMessage *object.Message
@@ -193,6 +215,11 @@ func (c *ApiController) GetMessageAnswer() {
 		webSearchEnabled = questionMessage.WebSearchEnabled
 	}
 	agentClients = object.MergeAgentToolClients(agentClients, store, webSearchEnabled, c.GetAcceptLanguage())
+	hasCallableTools := object.HasCallableAgentTools(agentClients)
+	fmt.Printf("[ToolDebug] GetMessageAnswer: hasCallableTools=%v toolCount=%d toolNames=%v webSearchEnabled=%v\n", hasCallableTools, len(object.GetAgentToolNames(agentClients)), object.GetAgentToolNames(agentClients), webSearchEnabled)
+	if hasCallableTools {
+		store.Prompt += "\n\n" + hermesToolExecutionPrompt
+	}
 
 	var knowledge []*model.RawMessage
 	var vectorScores []object.VectorScore
@@ -258,15 +285,17 @@ func (c *ApiController) GetMessageAnswer() {
 	}
 
 	var modelResult *model.ModelResult
-	if agentClients != nil {
+	if hasCallableTools {
 		messages := &model.AgentMessages{
 			Messages:  []*model.RawMessage{},
 			ToolCalls: nil,
 		}
 		agentInfo := &model.AgentInfo{
-			AgentClients:  agentClients,
-			AgentMessages: messages,
+			AgentClients:    agentClients,
+			AgentMessages:   messages,
+			RequireToolCall: model.ShouldRequireToolCall(question),
 		}
+		fmt.Printf("[ToolDebug] GetMessageAnswer: requireToolCall=%v question=%q\n", agentInfo.RequireToolCall, question)
 		modelResult, err = model.QueryTextWithTools(modelProviderObj, question, writer, history, prompt, knowledge, agentInfo, c.GetAcceptLanguage())
 	} else {
 		if isReasonModel(modelProvider.SubType) {

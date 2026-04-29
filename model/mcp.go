@@ -34,8 +34,9 @@ type AgentMessages struct {
 }
 
 type AgentInfo struct {
-	AgentClients  *agent.AgentClients
-	AgentMessages *AgentMessages
+	AgentClients    *agent.AgentClients
+	AgentMessages   *AgentMessages
+	RequireToolCall bool
 }
 
 type ToolCallResponse struct {
@@ -98,7 +99,7 @@ func handleToolCallsParameters(toolCall openai.ToolCall, toolCalls []openai.Tool
 
 func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error) {
 	var messages []*RawMessage
-	modelResult, err := p.QueryText(question, writer, history, prompt, knowledgeMessages, agentInfo, lang)
+	modelResult, err := queryTextWithToolChoiceFallback(p, question, writer, history, prompt, knowledgeMessages, agentInfo, lang)
 	if err != nil {
 		return nil, err
 	}
@@ -136,6 +137,7 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 			}
 		}
 		agentInfo.AgentMessages.Messages = messages
+		agentInfo.RequireToolCall = false
 		modelResult, err = p.QueryText(question, writer, history, prompt, knowledgeMessages, agentInfo, lang)
 		if err != nil {
 			return nil, err
@@ -158,6 +160,81 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 		mcpClient.Close()
 	}
 	return modelResult, nil
+}
+
+func queryTextWithToolChoiceFallback(p ModelProvider, question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error) {
+	if agentInfo != nil {
+		fmt.Printf("[ToolDebug] QueryTextWithTools: requireToolCall=%v toolChoice=%s toolCount=%d toolNames=%v\n", agentInfo.RequireToolCall, getToolChoiceMode(agentInfo), len(getAgentToolDebugNames(agentInfo)), getAgentToolDebugNames(agentInfo))
+	}
+	modelResult, err := p.QueryText(question, writer, history, prompt, knowledgeMessages, agentInfo, lang)
+	if err == nil || agentInfo == nil || !agentInfo.RequireToolCall || !isRequiredToolChoiceUnsupported(err) {
+		if agentInfo != nil {
+			agentInfo.RequireToolCall = false
+		}
+		return modelResult, err
+	}
+
+	fmt.Printf("[ToolDebug] QueryTextWithTools: tool_choice=required unsupported, fallback to auto: %v\n", err)
+	agentInfo.RequireToolCall = false
+	return p.QueryText(question, writer, history, prompt, knowledgeMessages, agentInfo, lang)
+}
+
+func isRequiredToolChoiceUnsupported(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "required") && (strings.Contains(text, "tool_choice") || strings.Contains(text, "tool choice"))
+}
+
+func getToolChoiceMode(agentInfo *AgentInfo) string {
+	if agentInfo != nil && agentInfo.RequireToolCall {
+		return "required"
+	}
+	return "auto"
+}
+
+func getAgentToolDebugNames(agentInfo *AgentInfo) []string {
+	if agentInfo == nil || agentInfo.AgentClients == nil {
+		return nil
+	}
+
+	res := []string{}
+	for _, tool := range agentInfo.AgentClients.Tools {
+		if tool == nil {
+			continue
+		}
+		res = append(res, tool.Name)
+	}
+	if agentInfo.AgentClients.WebSearchEnabled {
+		res = append(res, "web_search_preview")
+	}
+	return res
+}
+
+func ShouldRequireToolCall(question string) bool {
+	text := strings.ToLower(strings.TrimSpace(question))
+	if text == "" {
+		return false
+	}
+
+	if strings.Contains(text, "http://") || strings.Contains(text, "https://") || strings.Contains(text, "www.") {
+		return true
+	}
+
+	keywords := []string{
+		"下载", "搜索", "搜一下", "查找", "查询", "最新", "联网", "访问", "打开网页", "读取网页", "抓取",
+		"执行", "运行", "安装", "命令", "终端", "shell", "视频", "课程", "网盘", "百度网盘", "b站", "哔哩", "youtube",
+		"download", "search", "find", "latest", "recent", "browse", "open url", "fetch", "crawl", "scrape",
+		"execute", "run", "install", "command", "terminal", "shell", "yt-dlp", "youtube", "bilibili", "curl", "wget",
+	}
+
+	for _, keyword := range keywords {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func createToolMessage(toolCall openai.ToolCall, text string) *RawMessage {

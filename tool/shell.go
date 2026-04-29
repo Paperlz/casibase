@@ -44,7 +44,8 @@ func (s *shellBuiltin) GetDescription() string {
 	return `Execute a shell command and return its output.
 - command (required): the shell command to run (e.g. "ls -la", "echo hello").
 - timeout: execution timeout in seconds (default 30, max 300).
-- workdir: working directory for the command (default: current directory).`
+- workdir: working directory for the command (default: current directory).
+Use this tool for command-line tasks such as checking installed programs, using yt-dlp/curl/wget to download from a clear legal URL, inspecting files, and saving outputs to local paths. If the user asks to download media but has not provided a specific source or URL, ask for the source or search for legal/free sources before running a download command.`
 }
 
 func (s *shellBuiltin) GetInputSchema() interface{} {

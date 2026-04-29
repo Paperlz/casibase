@@ -247,8 +247,11 @@ func (p *LocalModelProvider) QueryText(question string, writer io.Writer, histor
 			if err != nil {
 				return nil, err
 			}
-			req.Tools = tools
-			req.ToolChoice = "auto"
+			if len(tools) > 0 {
+				req.Tools = tools
+				req.ToolChoice = getToolChoiceMode(agentInfo)
+			}
+			fmt.Printf("[ToolDebug] Local ChatCompletion request: model=%s toolCount=%d toolChoice=%v toolNames=%v\n", model, len(req.Tools), req.ToolChoice, getAgentToolDebugNames(agentInfo))
 		}
 
 		respStream, err := client.CreateChatCompletionStream(
