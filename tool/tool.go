@@ -54,7 +54,7 @@ func New(config Config, lang string) (Tool, error) {
 	case "gui":
 		return NewWindowsUiaTool(config)
 	case "video_download":
-		return &VideoDownloadTool{}, nil
+		return NewVideoDownloadTool(config)
 	case "browser_use":
 		return NewBrowserUseTool(config)
 	default:

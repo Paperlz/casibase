@@ -27,19 +27,29 @@ import (
 )
 
 // VideoDownloadTool is the Tool Type "video_download".
-type VideoDownloadTool struct{}
+type VideoDownloadTool struct {
+	ytDlpPath string
+}
+
+func NewVideoDownloadTool(config Config) (*VideoDownloadTool, error) {
+	ytDlpPath := strings.TrimSpace(config.ProviderUrl)
+	if ytDlpPath == "" {
+		return nil, fmt.Errorf("providerUrl is required for video_download tool")
+	}
+	return &VideoDownloadTool{ytDlpPath: ytDlpPath}, nil
+}
 
 func (p *VideoDownloadTool) BuiltinTools() []builtin_tool.BuiltinTool {
 	return []builtin_tool.BuiltinTool{
-		&videoDownloadBuiltin{},
-		&videoInfoBuiltin{},
-		&videoAudioExtractBuiltin{},
+		&videoDownloadBuiltin{ytDlpPath: p.ytDlpPath},
+		&videoInfoBuiltin{ytDlpPath: p.ytDlpPath},
+		&videoAudioExtractBuiltin{ytDlpPath: p.ytDlpPath},
 	}
 }
 
 // runYtDlp executes yt-dlp with the given arguments and returns stdout/stderr.
-func runYtDlp(ctx context.Context, args []string) (string, string, error) {
-	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+func runYtDlp(ctx context.Context, ytDlpPath string, args []string) (string, string, error) {
+	cmd := exec.CommandContext(ctx, ytDlpPath, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -87,7 +97,9 @@ func buildYtDlpResult(stdout, stderr string, runErr error) *protocol.CallToolRes
 
 // ─── video_download ───────────────────────────────────────────────────────────
 
-type videoDownloadBuiltin struct{}
+type videoDownloadBuiltin struct {
+	ytDlpPath string
+}
 
 func (v *videoDownloadBuiltin) GetName() string { return "video_download" }
 
@@ -171,13 +183,15 @@ func (v *videoDownloadBuiltin) Execute(ctx context.Context, arguments map[string
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSecs)*time.Second)
 	defer cancel()
 
-	stdout, stderr, err := runYtDlp(execCtx, args)
+	stdout, stderr, err := runYtDlp(execCtx, v.ytDlpPath, args)
 	return buildYtDlpResult(stdout, stderr, err), nil
 }
 
 // ─── video_info ───────────────────────────────────────────────────────────────
 
-type videoInfoBuiltin struct{}
+type videoInfoBuiltin struct {
+	ytDlpPath string
+}
 
 func (v *videoInfoBuiltin) GetName() string { return "video_info" }
 
@@ -229,13 +243,15 @@ func (v *videoInfoBuiltin) Execute(ctx context.Context, arguments map[string]int
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSecs)*time.Second)
 	defer cancel()
 
-	stdout, stderr, err := runYtDlp(execCtx, args)
+	stdout, stderr, err := runYtDlp(execCtx, v.ytDlpPath, args)
 	return buildYtDlpResult(stdout, stderr, err), nil
 }
 
 // ─── video_audio_extract ──────────────────────────────────────────────────────
 
-type videoAudioExtractBuiltin struct{}
+type videoAudioExtractBuiltin struct {
+	ytDlpPath string
+}
 
 func (v *videoAudioExtractBuiltin) GetName() string { return "video_audio_extract" }
 
@@ -330,6 +346,6 @@ func (v *videoAudioExtractBuiltin) Execute(ctx context.Context, arguments map[st
 	execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSecs)*time.Second)
 	defer cancel()
 
-	stdout, stderr, err := runYtDlp(execCtx, args)
+	stdout, stderr, err := runYtDlp(execCtx, v.ytDlpPath, args)
 	return buildYtDlpResult(stdout, stderr, err), nil
 }
