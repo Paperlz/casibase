@@ -60,7 +60,11 @@ func buildAgentClientsForToolProvider(toolProviderName string, lang string) (*ag
 }
 
 func GetAnswerWithTool(modelProviderName, toolProviderName, question, lang string) (string, *model.ModelResult, error) {
-	_, modelProviderObj, err := GetModelProviderFromContext("admin", modelProviderName, lang)
+	return GetAnswerWithToolForUser(modelProviderName, toolProviderName, question, "", lang)
+}
+
+func GetAnswerWithToolForUser(modelProviderName, toolProviderName, question, userId, lang string) (string, *model.ModelResult, error) {
+	_, modelProviderObj, err := GetModelProviderFromContextForUser("admin", modelProviderName, userId, lang)
 	if err != nil {
 		return "", nil, err
 	}

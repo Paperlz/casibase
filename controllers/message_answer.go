@@ -158,7 +158,7 @@ func (c *ApiController) GetMessageAnswer() {
 		modelProviderName = chat.ModelProvider
 	}
 
-	modelProvider, modelProviderObj, err := object.GetModelProviderFromContext(store.Owner, modelProviderName, c.GetAcceptLanguage())
+	modelProvider, modelProviderObj, err := object.GetModelProviderFromContextForUser(store.Owner, modelProviderName, c.GetSessionUsername(), c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseErrorStream(message, err.Error())
 		return
@@ -444,15 +444,6 @@ func (c *ApiController) GetAnswer() {
 	var answer string
 	var modelResult *model.ModelResult
 	var err error
-	if toolProvider != "" {
-		answer, modelResult, err = object.GetAnswerWithTool(provider, toolProvider, question, c.GetAcceptLanguage())
-	} else {
-		answer, modelResult, err = object.GetAnswer(provider, question, c.GetAcceptLanguage())
-	}
-	if err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
 
 	chat, err := object.GetChat(util.GetId("admin", chatName))
 	if err != nil {
@@ -494,9 +485,9 @@ func (c *ApiController) GetAnswer() {
 	}
 
 	if toolProvider != "" {
-		answer, modelResult, err = object.GetAnswerWithTool(provider, toolProvider, question, c.GetAcceptLanguage())
+		answer, modelResult, err = object.GetAnswerWithToolForUser(provider, toolProvider, question, userName, c.GetAcceptLanguage())
 	} else {
-		answer, modelResult, err = object.GetAnswer(provider, question, c.GetAcceptLanguage())
+		answer, modelResult, err = object.GetAnswerForUser(provider, question, userName, c.GetAcceptLanguage())
 	}
 	if err != nil {
 		c.ResponseError(err.Error())

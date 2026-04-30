@@ -444,6 +444,10 @@ func (p *Provider) GetScanProvider(lang string) (scan.ScanProvider, error) {
 }
 
 func GetModelProviderFromContext(owner string, name string, lang string) (*Provider, model.ModelProvider, error) {
+	return GetModelProviderFromContextForUser(owner, name, "", lang)
+}
+
+func GetModelProviderFromContextForUser(owner string, name string, userId string, lang string) (*Provider, model.ModelProvider, error) {
 	var providerName string
 	if name != "" {
 		providerName = name
@@ -458,7 +462,7 @@ func GetModelProviderFromContext(owner string, name string, lang string) (*Provi
 		}
 	}
 
-	return getModelProviderFromName(owner, providerName, lang)
+	return getModelProviderFromNameForUser(owner, providerName, userId, lang)
 }
 
 func GetEmbeddingProviderFromContext(owner string, name string, lang string) (*Provider, embedding.EmbeddingProvider, error) {

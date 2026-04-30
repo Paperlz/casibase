@@ -65,6 +65,9 @@ func GetModelProviderByProviderKey(providerKey string, lang string) (model.Model
 	if provider.Category != "Model" {
 		return nil, fmt.Errorf(i18n.Translate(lang, "object:The model provider: %s is not found"), provider.Name)
 	}
+	if IsOpenAICodexProviderType(provider.Type) {
+		return nil, fmt.Errorf("OpenAI Codex requires a signed-in user and cannot be used through the provider-key API")
+	}
 
 	modelProvider, err := provider.GetModelProvider(lang)
 	if err != nil {

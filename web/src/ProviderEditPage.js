@@ -15,7 +15,7 @@
 import React from "react";
 import Loading from "./common/Loading";
 import {AutoComplete, Button, Card, Col, Input, InputNumber, Row, Select, Slider, Switch} from "antd";
-import {LinkOutlined} from "@ant-design/icons";
+import {CheckCircleOutlined, DisconnectOutlined, LinkOutlined, LoginOutlined, ReloadOutlined} from "@ant-design/icons";
 import * as ProviderBackend from "./backend/ProviderBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
@@ -43,12 +43,22 @@ class ProviderEditPage extends React.Component {
       originalProvider: null,
       modelProviders: [],
       refreshButtonLoading: false,
+      openAICodexAuth: null,
+      openAICodexAuthState: "",
+      openAICodexAuthUrl: "",
+      openAICodexAuthInput: "",
+      openAICodexAuthLoading: false,
       isNewProvider: props.location?.state?.isNewProvider || false,
     };
+    this.openAICodexAuthPollTimer = null;
   }
 
   UNSAFE_componentWillMount() {
     this.getProvider();
+  }
+
+  componentWillUnmount() {
+    this.stopOpenAICodexAuthPolling();
   }
 
   getModelProviders() {
@@ -83,6 +93,10 @@ class ProviderEditPage extends React.Component {
           this.setState({
             provider: res.data,
             originalProvider: Setting.deepCopy(res.data),
+          }, () => {
+            if (this.isOpenAICodexProvider(this.state.provider)) {
+              this.loadOpenAICodexAuthStatus();
+            }
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
@@ -186,6 +200,281 @@ class ProviderEditPage extends React.Component {
     return Setting.getLabel(i18next.t("provider:Client secret"), i18next.t("provider:Client secret - Tooltip"));
   }
 
+  isOpenAICodexProvider(provider) {
+    return provider && provider.category === "Model" && provider.type === "OpenAI Codex";
+  }
+
+  hasUnsavedOpenAICodexProviderIdentity() {
+    const {provider, originalProvider} = this.state;
+    if (!provider || !originalProvider) {
+      return true;
+    }
+    return provider.name !== originalProvider.name || provider.type !== originalProvider.type;
+  }
+
+  loadOpenAICodexAuthStatus() {
+    const {provider} = this.state;
+    if (!this.isOpenAICodexProvider(provider) || !provider.name) {
+      return;
+    }
+    ProviderBackend.getOpenAICodexAuth(provider.name)
+      .then((res) => {
+        if (res.status === "ok") {
+          this.setState({openAICodexAuth: res.data});
+        }
+      });
+  }
+
+  stopOpenAICodexAuthPolling() {
+    if (this.openAICodexAuthPollTimer) {
+      clearInterval(this.openAICodexAuthPollTimer);
+      this.openAICodexAuthPollTimer = null;
+    }
+  }
+
+  pollOpenAICodexAuthStatus(state) {
+    this.stopOpenAICodexAuthPolling();
+    this.openAICodexAuthPollTimer = setInterval(() => {
+      ProviderBackend.getOpenAICodexAuthStatus(state)
+        .then((res) => {
+          if (res.status !== "ok") {
+            return;
+          }
+          const status = res.data || {};
+          this.setState({openAICodexAuth: status});
+          if (status.status === "success" || status.status === "connected") {
+            this.stopOpenAICodexAuthPolling();
+            this.setState({openAICodexAuthLoading: false});
+            Setting.showMessage("success", i18next.t("provider:ChatGPT connected"));
+            this.loadOpenAICodexAuthStatus();
+          } else if (status.status === "error" || status.status === "expired") {
+            this.stopOpenAICodexAuthPolling();
+            this.setState({openAICodexAuthLoading: false});
+            Setting.showMessage("error", status.errorText || i18next.t("provider:ChatGPT connection failed"));
+          }
+        });
+    }, 2000);
+  }
+
+  openOpenAICodexAuthUrl(authUrl = this.state.openAICodexAuthUrl) {
+    const authWindow = authUrl ? window.open(authUrl, "_blank") : null;
+    if (authWindow) {
+      authWindow.opener = null;
+    }
+    return authWindow;
+  }
+
+  startOpenAICodexAuth() {
+    const {provider} = this.state;
+    if (this.hasUnsavedOpenAICodexProviderIdentity()) {
+      Setting.showMessage("error", i18next.t("provider:Please save this provider before connecting ChatGPT"));
+      return;
+    }
+    this.setState({openAICodexAuthLoading: true});
+    ProviderBackend.startOpenAICodexAuth(provider.name)
+      .then((res) => {
+        if (res.status === "ok") {
+          const data = res.data || {};
+          this.setState({
+            openAICodexAuthState: data.state || "",
+            openAICodexAuthUrl: data.authUrl || "",
+          });
+          const authWindow = this.openOpenAICodexAuthUrl(data.authUrl);
+          if (!authWindow && data.authUrl) {
+            Setting.showMessage("error", i18next.t("provider:OpenAI sign-in popup was blocked"));
+          }
+          if (data.callbackServerError) {
+            Setting.showMessage("error", `${i18next.t("provider:Local callback unavailable")}: ${data.callbackServerError}`);
+          } else {
+            Setting.showMessage("success", i18next.t("provider:Complete ChatGPT sign-in in your browser"));
+          }
+          this.pollOpenAICodexAuthStatus(data.state);
+        } else {
+          this.setState({openAICodexAuthLoading: false});
+          Setting.showMessage("error", `${i18next.t("provider:ChatGPT connection failed")}: ${res.msg}`);
+        }
+      })
+      .catch((error) => {
+        this.setState({openAICodexAuthLoading: false});
+        Setting.showMessage("error", `${i18next.t("provider:ChatGPT connection failed")}: ${error}`);
+      });
+  }
+
+  completeOpenAICodexAuth() {
+    if (!this.state.openAICodexAuthState || !this.state.openAICodexAuthInput) {
+      Setting.showMessage("error", i18next.t("provider:Paste the callback URL or code first"));
+      return;
+    }
+    this.setState({openAICodexAuthLoading: true});
+    ProviderBackend.completeOpenAICodexAuth(this.state.openAICodexAuthState, this.state.openAICodexAuthInput)
+      .then((res) => {
+        if (res.status === "ok") {
+          this.stopOpenAICodexAuthPolling();
+          this.setState({
+            openAICodexAuth: res.data,
+            openAICodexAuthInput: "",
+            openAICodexAuthLoading: false,
+          });
+          Setting.showMessage("success", i18next.t("provider:ChatGPT connected"));
+          this.loadOpenAICodexAuthStatus();
+        } else {
+          this.setState({openAICodexAuthLoading: false});
+          Setting.showMessage("error", `${i18next.t("provider:ChatGPT connection failed")}: ${res.msg}`);
+        }
+      })
+      .catch((error) => {
+        this.setState({openAICodexAuthLoading: false});
+        Setting.showMessage("error", `${i18next.t("provider:ChatGPT connection failed")}: ${error}`);
+      });
+  }
+
+  deleteOpenAICodexAuth() {
+    const {provider} = this.state;
+    if (!provider || !provider.name) {
+      return;
+    }
+    ProviderBackend.deleteOpenAICodexAuth(provider.name)
+      .then((res) => {
+        if (res.status === "ok") {
+          this.stopOpenAICodexAuthPolling();
+          this.setState({
+            openAICodexAuth: {connected: false, status: "disconnected", providerName: provider.name},
+            openAICodexAuthState: "",
+            openAICodexAuthUrl: "",
+            openAICodexAuthInput: "",
+            openAICodexAuthLoading: false,
+          });
+          Setting.showMessage("success", i18next.t("provider:ChatGPT disconnected"));
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${res.msg}`);
+        }
+      })
+      .catch((error) => {
+        Setting.showMessage("error", `${i18next.t("general:Failed to delete")}: ${error}`);
+      });
+  }
+
+  renderOpenAICodexAuthWidget(isRemote) {
+    if (!this.isOpenAICodexProvider(this.state.provider)) {
+      return null;
+    }
+
+    const auth = this.state.openAICodexAuth || {};
+    const connected = auth.connected || auth.status === "connected" || auth.status === "success";
+    const statusText = connected ? i18next.t("provider:Connected") : i18next.t("provider:Disconnected");
+    const statusColor = connected ? "#389e0d" : "#8c8c8c";
+    const updatedText = auth.updatedTime ? `${i18next.t("general:Updated time")}: ${auth.updatedTime}` : "";
+    const accountText = auth.accountId ? `${i18next.t("provider:ChatGPT account")}: ${auth.accountId}` : "";
+    const canConnect = !isRemote && !this.hasUnsavedOpenAICodexProviderIdentity();
+
+    return (
+      <>
+        <Row style={{marginTop: "20px"}}>
+          <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+            {Setting.getLabel(i18next.t("provider:ChatGPT account"), i18next.t("provider:ChatGPT account - Tooltip"))} :
+          </Col>
+          <Col span={22}>
+            <div style={{display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap"}}>
+              <span style={{color: statusColor}}>
+                <CheckCircleOutlined style={{marginRight: "6px"}} />
+                {statusText}
+              </span>
+              {accountText ? <span style={{color: "#595959"}}>{accountText}</span> : null}
+              {updatedText ? <span style={{color: "#8c8c8c"}}>{updatedText}</span> : null}
+            </div>
+          </Col>
+        </Row>
+        <Row style={{marginTop: "12px"}}>
+          <Col span={(Setting.isMobile()) ? 0 : 2} />
+          <Col span={22}>
+            <Button
+              type="primary"
+              icon={<LoginOutlined />}
+              disabled={!canConnect}
+              loading={this.state.openAICodexAuthLoading}
+              onClick={() => this.startOpenAICodexAuth()}
+            >
+              {connected ? i18next.t("provider:Reconnect ChatGPT") : i18next.t("provider:Connect ChatGPT")}
+            </Button>
+            <Button
+              style={{marginLeft: "10px"}}
+              icon={<ReloadOutlined />}
+              disabled={isRemote}
+              onClick={() => this.loadOpenAICodexAuthStatus()}
+            >
+              {i18next.t("general:Refresh")}
+            </Button>
+            <Button
+              style={{marginLeft: "10px"}}
+              icon={<DisconnectOutlined />}
+              disabled={isRemote || !connected}
+              danger
+              onClick={() => this.deleteOpenAICodexAuth()}
+            >
+              {i18next.t("provider:Disconnect ChatGPT")}
+            </Button>
+            {this.hasUnsavedOpenAICodexProviderIdentity() ? (
+              <div style={{marginTop: "8px", color: "#fa8c16"}}>
+                {i18next.t("provider:Save this provider before connecting ChatGPT")}
+              </div>
+            ) : null}
+          </Col>
+        </Row>
+        {this.state.openAICodexAuthUrl ? (
+          <Row style={{marginTop: "12px"}}>
+            <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+              {i18next.t("provider:OpenAI sign-in URL")} :
+            </Col>
+            <Col span={22}>
+              <Input.Group compact>
+                <Input
+                  readOnly
+                  style={{width: Setting.isMobile() ? "100%" : "calc(100% - 220px)"}}
+                  value={this.state.openAICodexAuthUrl}
+                />
+                <Button
+                  icon={<LinkOutlined />}
+                  onClick={() => this.openOpenAICodexAuthUrl()}
+                >
+                  {i18next.t("provider:Open ChatGPT sign-in")}
+                </Button>
+                <Button
+                  onClick={() => {
+                    copy(this.state.openAICodexAuthUrl);
+                    Setting.showMessage("success", i18next.t("general:Copied to clipboard successfully"));
+                  }}
+                >
+                  {i18next.t("general:Copy")}
+                </Button>
+              </Input.Group>
+            </Col>
+          </Row>
+        ) : null}
+        <Row style={{marginTop: "12px"}}>
+          <Col span={(Setting.isMobile()) ? 0 : 2} />
+          <Col span={22}>
+            <TextArea
+              disabled={isRemote}
+              autoSize={{minRows: 2, maxRows: 4}}
+              value={this.state.openAICodexAuthInput}
+              placeholder={i18next.t("provider:Paste ChatGPT callback URL or code")}
+              onChange={e => this.setState({openAICodexAuthInput: e.target.value})}
+            />
+            <Button
+              style={{marginTop: "8px"}}
+              icon={<LinkOutlined />}
+              disabled={isRemote || !this.state.openAICodexAuthState}
+              loading={this.state.openAICodexAuthLoading}
+              onClick={() => this.completeOpenAICodexAuth()}
+            >
+              {i18next.t("provider:Complete ChatGPT connection")}
+            </Button>
+          </Col>
+        </Row>
+      </>
+    );
+  }
+
   isGoogleWebSearchProvider(provider) {
     return provider.category === "Tool" && provider.type === "Web Search" && provider.subType === "Google";
   }
@@ -225,7 +514,8 @@ class ProviderEditPage extends React.Component {
       provider.category === "Scan" ||
       provider.category === "Tool" ||
       provider.type === "Dummy" ||
-      provider.type === "Ollama"
+      provider.type === "Ollama" ||
+      provider.type === "OpenAI Codex"
     );
   }
 
@@ -285,7 +575,7 @@ class ProviderEditPage extends React.Component {
     if (provider.category === "Model") {
       if (["OpenRouter", "iFlytek", "Hugging Face", "Baidu Cloud", "MiniMax", "Gemini", "Alibaba Cloud", "Baichuan", "Volcano Engine", "DeepSeek", "StepFun", "Tencent Cloud", "Mistral", "Yi", "Silicon Flow", "Ollama", "Writer"].includes(provider.type)) {
         return true;
-      } else if (provider.type === "OpenAI") {
+      } else if (provider.type === "OpenAI" || provider.type === "OpenAI Codex") {
         if (provider.subType.includes("o1") || provider.subType.includes("o3") || provider.subType.includes("o4")) {
           return false;
         } else {
@@ -300,7 +590,7 @@ class ProviderEditPage extends React.Component {
     if (provider.category === "Model") {
       if (["OpenRouter", "Baidu Cloud", "Gemini", "Alibaba Cloud", "Baichuan", "Volcano Engine", "DeepSeek", "StepFun", "Tencent Cloud", "Mistral", "Yi", "Silicon Flow", "Ollama", "Writer"].includes(provider.type)) {
         return true;
-      } else if (provider.type === "OpenAI") {
+      } else if (provider.type === "OpenAI" || provider.type === "OpenAI Codex") {
         if (provider.subType.includes("o1") || provider.subType.includes("o3") || provider.subType.includes("o4")) {
           return false;
         } else {
@@ -468,6 +758,14 @@ class ProviderEditPage extends React.Component {
               if (this.state.provider.category === "Model") {
                 if (value === "OpenAI") {
                   this.updateProviderField("subType", "gpt-4");
+                } else if (value === "OpenAI Codex") {
+                  this.updateProviderField("subType", "gpt-5.4");
+                  this.setState({
+                    openAICodexAuth: null,
+                    openAICodexAuthState: "",
+                    openAICodexAuthUrl: "",
+                    openAICodexAuthInput: "",
+                  }, () => this.loadOpenAICodexAuthStatus());
                 } else if (value === "Gemini") {
                   this.updateProviderField("subType", "gemini-pro");
                 } else if (value === "OpenRouter") {
@@ -815,6 +1113,7 @@ class ProviderEditPage extends React.Component {
             </Row>
           ) : null
         }
+        {this.renderOpenAICodexAuthWidget(isRemote)}
         {
           (this.state.provider.category === "Model" && this.state.provider.type === "Claude" && Setting.getThinkingModelMaxTokens(this.state.provider.subType) !== 0) ? (
             <>
@@ -1097,7 +1396,7 @@ class ProviderEditPage extends React.Component {
                 </Col>
                 <this.InputSlider
                   min={0}
-                  max={["Alibaba Cloud", "Gemini", "OpenAI", "OpenRouter", "Baichuan", "DeepSeek", "StepFun", "Tencent Cloud", "Mistral", "Yi", "Ollama", "Writer"].includes(this.state.provider.type) ? 2 : 1}
+                  max={["Alibaba Cloud", "Gemini", "OpenAI", "OpenAI Codex", "OpenRouter", "Baichuan", "DeepSeek", "StepFun", "Tencent Cloud", "Mistral", "Yi", "Ollama", "Writer"].includes(this.state.provider.type) ? 2 : 1}
                   step={0.01}
                   value={this.state.provider.temperature}
                   disabled={isRemote}
@@ -1280,7 +1579,7 @@ class ProviderEditPage extends React.Component {
           ) : null
         }
         {
-          this.state.provider.category === "Model" ? (
+          this.state.provider.category === "Model" && !this.isOpenAICodexProvider(this.state.provider) ? (
             <Row style={{marginTop: "20px"}} >
               <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
                 {Setting.getLabel(i18next.t("provider:Provider key"), i18next.t("provider:Provider key - Tooltip"))} :
@@ -1469,6 +1768,7 @@ class ProviderEditPage extends React.Component {
             Setting.showMessage("success", i18next.t("general:Successfully saved"));
             this.setState({
               providerName: this.state.provider.name,
+              originalProvider: Setting.deepCopy(this.state.provider),
               isNewProvider: false,
             });
 

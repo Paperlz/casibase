@@ -403,13 +403,21 @@ func (w *MyWriter) Write(p []byte) (n int, err error) {
 }
 
 func GetAnswer(provider string, question string, lang string) (string, *model.ModelResult, error) {
+	return GetAnswerForUser(provider, question, "", lang)
+}
+
+func GetAnswerForUser(provider string, question string, userId string, lang string) (string, *model.ModelResult, error) {
 	history := []*model.RawMessage{}
 	knowledge := []*model.RawMessage{}
-	return GetAnswerWithContext(provider, question, history, knowledge, "", lang)
+	return GetAnswerWithContextForUser(provider, question, history, knowledge, "", userId, lang)
 }
 
 func GetAnswerWithContext(provider string, question string, history []*model.RawMessage, knowledge []*model.RawMessage, prompt string, lang string) (string, *model.ModelResult, error) {
-	_, modelProviderObj, err := GetModelProviderFromContext("admin", provider, lang)
+	return GetAnswerWithContextForUser(provider, question, history, knowledge, prompt, "", lang)
+}
+
+func GetAnswerWithContextForUser(provider string, question string, history []*model.RawMessage, knowledge []*model.RawMessage, prompt string, userId string, lang string) (string, *model.ModelResult, error) {
+	_, modelProviderObj, err := GetModelProviderFromContextForUser("admin", provider, userId, lang)
 	if err != nil {
 		return "", nil, err
 	}

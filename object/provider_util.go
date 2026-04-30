@@ -26,6 +26,10 @@ import (
 )
 
 func getModelProviderFromName(owner string, providerName string, lang string) (*Provider, model.ModelProvider, error) {
+	return getModelProviderFromNameForUser(owner, providerName, "", lang)
+}
+
+func getModelProviderFromNameForUser(owner string, providerName string, userId string, lang string) (*Provider, model.ModelProvider, error) {
 	var provider *Provider
 	var err error
 	if providerName != "" {
@@ -47,11 +51,26 @@ func getModelProviderFromName(owner string, providerName string, lang string) (*
 	if provider.Category != "Model" {
 		return nil, nil, fmt.Errorf(i18n.Translate(lang, "object:The model provider: %s is expected to be \")Model\" category, got: \"%s\""), provider.GetId(), provider.Category)
 	}
-	if provider.ClientSecret == "" && provider.Type != "Dummy" && provider.Type != "Ollama" {
+	if provider.ClientSecret == "" && provider.Type != "Dummy" && provider.Type != "Ollama" && !IsOpenAICodexProviderType(provider.Type) {
 		return nil, nil, fmt.Errorf(i18n.Translate(lang, "object:The model provider: %s's client secret should not be empty"), provider.GetId())
 	}
 
-	providerObj, err := provider.GetModelProvider(lang)
+	providerToUse := provider
+	if IsOpenAICodexProviderType(provider.Type) {
+		if userId == "" {
+			return nil, nil, fmt.Errorf("OpenAI Codex requires a signed-in user. Please connect ChatGPT in the provider page.")
+		}
+		credential, err := ResolveOpenAICodexCredential(userId, provider.Name)
+		if err != nil {
+			return nil, nil, err
+		}
+		copied := *provider
+		copied.ClientId = credential.AccountId
+		copied.ClientSecret = credential.AccessToken
+		providerToUse = &copied
+	}
+
+	providerObj, err := providerToUse.GetModelProvider(lang)
 	if err != nil {
 		return nil, nil, err
 	}

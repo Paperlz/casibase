@@ -76,6 +76,11 @@ func initAPI() {
 	beego.Router("/api/refresh-mcp-tools", &controllers.ApiController{}, "POST:RefreshMcpTools")
 	beego.Router("/api/test-tool-provider", &controllers.ApiController{}, "POST:TestToolProvider")
 	beego.Router("/api/test-mcp-provider", &controllers.ApiController{}, "POST:TestMcpProvider")
+	beego.Router("/api/start-openai-codex-auth", &controllers.ApiController{}, "POST:StartOpenAICodexAuth")
+	beego.Router("/api/get-openai-codex-auth-status", &controllers.ApiController{}, "GET:GetOpenAICodexAuthStatus")
+	beego.Router("/api/complete-openai-codex-auth", &controllers.ApiController{}, "POST:CompleteOpenAICodexAuth")
+	beego.Router("/api/get-openai-codex-auth", &controllers.ApiController{}, "GET:GetOpenAICodexAuth")
+	beego.Router("/api/delete-openai-codex-auth", &controllers.ApiController{}, "POST:DeleteOpenAICodexAuth")
 	beego.Router("/api/set-telegram-webhook", &controllers.ApiController{}, "POST:SetTelegramWebhook")
 	beego.Router("/webhook/telegram/:providerName", &controllers.ApiController{}, "POST:TelegramWebhook")
 

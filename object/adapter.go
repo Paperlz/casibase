@@ -269,6 +269,16 @@ func (a *Adapter) createTable() {
 		panic(err)
 	}
 
+	err = a.engine.Sync2(new(OpenAICodexCredential))
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.engine.Sync2(new(OpenAICodexOAuthState))
+	if err != nil {
+		panic(err)
+	}
+
 	err = a.engine.Sync2(new(File))
 	if err != nil {
 		panic(err)

@@ -843,6 +843,10 @@ export function getOtherProviderInfo() {
         logo: `${StaticBaseUrl}/img/social_openai.svg`,
         url: "https://platform.openai.com",
       },
+      "OpenAI Codex": {
+        logo: `${StaticBaseUrl}/img/social_openai.svg`,
+        url: "https://chatgpt.com",
+      },
       "Gemini": {
         logo: `${StaticBaseUrl}/img/social_gemini.png`,
         url: "https://gemini.google.com/",
@@ -1361,7 +1365,7 @@ export function isProviderSupportWebSearch(provider) {
     return false;
   }
 
-  if (provider.type === "OpenAI") {
+  if (provider.type === "OpenAI" || provider.type === "OpenAI Codex") {
     return true;
   }
 
@@ -1393,6 +1397,7 @@ export function getProviderTypeOptions(category) {
     return (
       [
         {id: "OpenAI", name: "OpenAI"},
+        {id: "OpenAI Codex", name: "OpenAI Codex"},
         {id: "Gemini", name: "Gemini"},
         {id: "Hugging Face", name: "Hugging Face"},
         {id: "Claude", name: "Claude"},
@@ -1595,6 +1600,11 @@ const openaiEmbeddings = [
   {id: "text-embedding-3-large", name: "text-embedding-3-large"},
 ];
 
+const openaiCodexModels = openaiModels.filter(model => {
+  const id = model.id.toLowerCase();
+  return !id.startsWith("gpt-image") && !id.includes("dall-e");
+});
+
 export function getTtsFlavorOptions(type, subType) {
   if (type === "Alibaba Cloud" && subType === "cosyvoice-v1") {
     return [
@@ -1627,6 +1637,8 @@ export function getTtsFlavorOptions(type, subType) {
 export function getModelSubTypeOptions(type) {
   if (type === "OpenAI" || type === "Azure") {
     return openaiModels;
+  } else if (type === "OpenAI Codex") {
+    return openaiCodexModels;
   } else if (type === "Gemini") {
     return [
       // Gemini 3.1 series (Preview)

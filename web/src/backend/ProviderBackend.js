@@ -116,6 +116,59 @@ export function testMcpProvider(provider) {
   }).then(res => Setting.handleFetchResponse(res));
 }
 
+export function startOpenAICodexAuth(provider) {
+  return fetch(`${Setting.ServerUrl}/api/start-openai-codex-auth`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify({provider}),
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function getOpenAICodexAuthStatus(state) {
+  return fetch(`${Setting.ServerUrl}/api/get-openai-codex-auth-status?state=${encodeURIComponent(state)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function completeOpenAICodexAuth(state, code) {
+  return fetch(`${Setting.ServerUrl}/api/complete-openai-codex-auth`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify({state, code}),
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function getOpenAICodexAuth(provider) {
+  return fetch(`${Setting.ServerUrl}/api/get-openai-codex-auth?provider=${encodeURIComponent(provider)}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function deleteOpenAICodexAuth(provider) {
+  return fetch(`${Setting.ServerUrl}/api/delete-openai-codex-auth`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: JSON.stringify({provider}),
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
 export function setTelegramWebhook(id) {
   return fetch(`${Setting.ServerUrl}/api/set-telegram-webhook?id=${encodeURIComponent(id)}`, {
     method: "POST",
