@@ -242,7 +242,7 @@ class ChatWidget extends React.Component {
       });
   }
 
-  newMessage(text, fileName, isHidden, isRegenerated, webSearchEnabled = false) {
+  newMessage(text, fileName, isHidden, isRegenerated) {
     const randomName = Setting.getRandomName();
     // Ensure we get the current modelProvider from the chat or select the first available one
     const currentModelProvider = this.state.currentChat?.modelProvider || this.props.modelProvider ||
@@ -263,12 +263,11 @@ class ChatWidget extends React.Component {
       isAlerted: false,
       isRegenerated: isRegenerated || false,
       fileName: fileName || "",
-      webSearchEnabled: webSearchEnabled,
       modelProvider: currentModelProvider,
     };
   }
 
-  sendMessage = (text, fileName, isHidden, isRegenerated, webSearchEnabled = false) => {
+  sendMessage = (text, fileName, isHidden, isRegenerated) => {
     if (!this.state.currentChat) {
       Setting.showMessage("error", i18next.t("chat:The chat is not found"));
       return;
@@ -283,13 +282,7 @@ class ChatWidget extends React.Component {
       messageError: false,
     });
 
-    const newMessage = this.newMessage(
-      text,
-      fileName,
-      isHidden,
-      isRegenerated,
-      this.props.defaultWebSearchEnabled || webSearchEnabled
-    );
+    const newMessage = this.newMessage(text, fileName, isHidden, isRegenerated);
     MessageBackend.addMessage(newMessage)
       .then((res) => {
         if (res.status === "ok") {
@@ -787,8 +780,8 @@ class ChatWidget extends React.Component {
             loading={this.state.messageLoading}
             messages={this.state.messages}
             messageError={this.state.messageError}
-            sendMessage={(text, fileName, isHidden = false, regenerate = false, webSearchEnabled = false) => {
-              this.sendMessage(text, fileName, isHidden, regenerate, webSearchEnabled);
+            sendMessage={(text, fileName, regenerate = false) => {
+              this.sendMessage(text, fileName, false, regenerate);
             }}
             onMessageEdit={this.handleMessageEdit}
             onCancelMessage={this.cancelMessage}
@@ -799,8 +792,6 @@ class ChatWidget extends React.Component {
               prompts: prompts,
               exampleQuestions: exampleQuestions || prompts,
             }}
-            chat={this.state.currentChat}
-            defaultWebSearchEnabled={this.props.defaultWebSearchEnabled}
             styles={{
               layout: {
                 border: "none",

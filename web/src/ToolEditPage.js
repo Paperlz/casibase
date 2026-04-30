@@ -193,7 +193,7 @@ class ToolEditPage extends React.Component {
             </Col>
           </Row>
         ) : null}
-        {["web_search", "web_fetch", "web_browser", "video_download"].includes(this.state.tool.type) ? (
+        {["web_search", "web_fetch", "web_browser"].includes(this.state.tool.type) ? (
           <Row style={{marginTop: "20px"}}>
             <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
               {this.getProviderUrlLabel(this.state.tool)} :

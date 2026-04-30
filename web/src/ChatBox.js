@@ -41,7 +41,7 @@ class ChatBox extends React.Component {
       isLoadingTTS: false,
       isVoiceInput: false,
       rerenderErrorMessage: false,
-      webSearchEnabled: props.defaultWebSearchEnabled || false,
+      webSearchEnabled: false,
     };
     this.synth = window.speechSynthesis;
     this.cursorPosition = undefined;

@@ -59,8 +59,8 @@ const OFFICE_TOOL_CONTENT = {
 
 const VIDEO_DOWNLOAD_TOOL_CONTENT = {
   "video_info": JSON.stringify({tool: "video_info", arguments: {url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}, null, 2),
-  "video_download": JSON.stringify({tool: "video_download", arguments: {url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_dir: "/tmp/videos", format: "bestvideo+bestaudio/best"}}, null, 2),
-  "video_audio_extract": JSON.stringify({tool: "video_audio_extract", arguments: {url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_dir: "/tmp/audio", audio_format: "mp3", audio_quality: "0"}}, null, 2),
+  "video_download": JSON.stringify({tool: "video_download", arguments: {url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_dir: "videos", format: "bestvideo+bestaudio/best"}}, null, 2),
+  "video_audio_extract": JSON.stringify({tool: "video_audio_extract", arguments: {url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_dir: "audio", audio_format: "mp3", audio_quality: "0"}}, null, 2),
 };
 
 const VIDEO_DOWNLOAD_TOOL_OPTIONS = [
@@ -379,7 +379,6 @@ class TestToolWidget extends React.Component {
                 height="600px"
                 showHeader={true}
                 showNewChatButton={true}
-                defaultWebSearchEnabled={tool.type === "video_download"}
                 exampleQuestions={(tool.promptExamples || []).map(ex => ({title: ex, text: ex, image: ""}))}
               />
             ) : (

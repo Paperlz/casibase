@@ -18,8 +18,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
@@ -31,10 +37,10 @@ type VideoDownloadTool struct {
 	ytDlpPath string
 }
 
-func NewVideoDownloadTool(config Config) (*VideoDownloadTool, error) {
-	ytDlpPath := strings.TrimSpace(config.ProviderUrl)
-	if ytDlpPath == "" {
-		return nil, fmt.Errorf("providerUrl is required for video_download tool")
+func NewVideoDownloadTool(_ Config) (*VideoDownloadTool, error) {
+	ytDlpPath, err := resolveYtDlpPath()
+	if err != nil {
+		return nil, err
 	}
 	return &VideoDownloadTool{ytDlpPath: ytDlpPath}, nil
 }
@@ -55,6 +61,115 @@ func runYtDlp(ctx context.Context, ytDlpPath string, args []string) (string, str
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	return stdout.String(), stderr.String(), err
+}
+
+var ytDlpDownloadMu sync.Mutex
+
+func resolveYtDlpPath() (string, error) {
+	if path, err := exec.LookPath("yt-dlp"); err == nil {
+		return path, nil
+	}
+	return ensureManagedYtDlp()
+}
+
+func ensureManagedYtDlp() (string, error) {
+	ytDlpDownloadMu.Lock()
+	defer ytDlpDownloadMu.Unlock()
+
+	if path, err := exec.LookPath("yt-dlp"); err == nil {
+		return path, nil
+	}
+
+	assetName, err := ytDlpReleaseAssetName()
+	if err != nil {
+		return "", err
+	}
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to locate user cache directory for yt-dlp install: %w", err)
+	}
+	if cacheDir == "" {
+		return "", fmt.Errorf("failed to locate user cache directory for yt-dlp install")
+	}
+
+	installDir := filepath.Join(cacheDir, "openagent", "yt-dlp")
+	executableName := "yt-dlp"
+	if runtime.GOOS == "windows" {
+		executableName = "yt-dlp.exe"
+	}
+	executablePath := filepath.Join(installDir, executableName)
+	if fileExists(executablePath) {
+		if runtime.GOOS != "windows" {
+			_ = os.Chmod(executablePath, 0o755)
+		}
+		return executablePath, nil
+	}
+
+	downloadURL := fmt.Sprintf("https://github.com/yt-dlp/yt-dlp/releases/latest/download/%s", assetName)
+	if err = downloadYtDlpBinary(downloadURL, executablePath); err != nil {
+		return "", err
+	}
+	if runtime.GOOS != "windows" {
+		if err = os.Chmod(executablePath, 0o755); err != nil {
+			return "", fmt.Errorf("failed to mark yt-dlp executable as runnable: %w", err)
+		}
+	}
+	return executablePath, nil
+}
+
+func ytDlpReleaseAssetName() (string, error) {
+	switch runtime.GOOS {
+	case "linux":
+		return "yt-dlp_linux", nil
+	case "darwin":
+		return "yt-dlp_macos", nil
+	case "windows":
+		return "yt-dlp.exe", nil
+	default:
+		return "", fmt.Errorf("yt-dlp managed install is not supported on %s", runtime.GOOS)
+	}
+}
+
+func downloadYtDlpBinary(downloadURL, executablePath string) error {
+	if err := os.MkdirAll(filepath.Dir(executablePath), 0o755); err != nil {
+		return fmt.Errorf("failed to create yt-dlp install directory: %w", err)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Get(downloadURL)
+	if err != nil {
+		return fmt.Errorf("failed to download yt-dlp from %s: %w", downloadURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("failed to download yt-dlp from %s: HTTP %d", downloadURL, resp.StatusCode)
+	}
+
+	tmpPath := executablePath + ".tmp"
+	_ = os.Remove(tmpPath)
+	out, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("failed to create yt-dlp binary %s: %w", tmpPath, err)
+	}
+	written, copyErr := io.Copy(out, resp.Body)
+	closeErr := out.Close()
+	if copyErr != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to write yt-dlp binary %s: %w", tmpPath, copyErr)
+	}
+	if closeErr != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to close yt-dlp binary %s: %w", tmpPath, closeErr)
+	}
+	if resp.ContentLength > 0 && written != resp.ContentLength {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("yt-dlp download was incomplete: got %d bytes, expected %d", written, resp.ContentLength)
+	}
+	if err = os.Rename(tmpPath, executablePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to move yt-dlp binary to %s: %w", executablePath, err)
+	}
+	return nil
 }
 
 // buildResult constructs a CallToolResult from yt-dlp output.

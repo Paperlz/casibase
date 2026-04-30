@@ -192,10 +192,6 @@ func (c *ApiController) GetMessageAnswer() {
 	if questionMessage != nil {
 		webSearchEnabled = questionMessage.WebSearchEnabled
 	}
-	if chat.Tool == "video_download" && webSearchEnabled {
-		store.Tools = append([]string{"web_search"}, store.Tools...)
-		store.Prompt += "\nWhen the user asks you to find a video, call web_search first to choose a real URL. Do not guess or reuse a URL from prior context."
-	}
 	agentClients = object.MergeAgentToolClients(agentClients, store, webSearchEnabled, c.GetAcceptLanguage())
 
 	var knowledge []*model.RawMessage
