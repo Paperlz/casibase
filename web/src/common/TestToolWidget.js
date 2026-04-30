@@ -379,6 +379,7 @@ class TestToolWidget extends React.Component {
                 height="600px"
                 showHeader={true}
                 showNewChatButton={true}
+                defaultWebSearchEnabled={tool.type === "video_download"}
                 exampleQuestions={(tool.promptExamples || []).map(ex => ({title: ex, text: ex, image: ""}))}
               />
             ) : (
