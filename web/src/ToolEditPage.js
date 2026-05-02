@@ -14,13 +14,14 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import {Button, Card, Col, Input, Row, Select, Switch, Table, Tag} from "antd";
+import {Alert, Button, Card, Col, Input, Row, Select, Switch, Table, Tag} from "antd";
 import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import TestToolWidget from "./common/TestToolWidget";
 
 const {Option} = Select;
+const YETI_BROWSER_BRIDGE_MODE = "YetiBrowser Bridge (Experimental)";
 
 class ToolEditPage extends React.Component {
   constructor(props) {
@@ -59,14 +60,25 @@ class ToolEditPage extends React.Component {
   }
 
   shouldShowClientIdInput(tool) {
-    return tool.type === "web_search" && tool.subType === "Google";
+    return (tool.type === "web_search" && tool.subType === "Google") || this.isYetiBrowserBridgeMode(tool);
   }
 
   shouldShowClientSecretInput(tool) {
     return tool.type === "web_search" && ["Google", "Baidu"].includes(tool.subType);
   }
 
+  shouldShowProviderUrlInput(tool) {
+    return ["web_search", "web_fetch", "web_browser"].includes(tool.type) || this.isYetiBrowserBridgeMode(tool);
+  }
+
+  isYetiBrowserBridgeMode(tool) {
+    return tool.type === "browser_use" && (tool.mode || "User Chrome") === YETI_BROWSER_BRIDGE_MODE;
+  }
+
   getClientIdLabel(tool) {
+    if (this.isYetiBrowserBridgeMode(tool)) {
+      return Setting.getLabel(i18next.t("tool:Bridge client name"), i18next.t("tool:Bridge client name - Tooltip"));
+    }
     if (tool.type === "web_search" && tool.subType === "Google") {
       return Setting.getLabel(i18next.t("provider:Search engine ID (cx)"), i18next.t("provider:Search engine ID (cx) - Tooltip"));
     }
@@ -81,6 +93,9 @@ class ToolEditPage extends React.Component {
   }
 
   getProviderUrlLabel(tool) {
+    if (this.isYetiBrowserBridgeMode(tool)) {
+      return Setting.getLabel(i18next.t("tool:Bridge WebSocket address"), i18next.t("tool:Bridge WebSocket address - Tooltip"));
+    }
     return Setting.getLabel(i18next.t("general:Provider URL"), i18next.t("general:Provider URL - Tooltip"));
   }
 
@@ -221,7 +236,7 @@ class ToolEditPage extends React.Component {
             </Col>
           </Row>
         ) : null}
-        {["web_search", "web_fetch", "web_browser"].includes(this.state.tool.type) ? (
+        {this.shouldShowProviderUrlInput(this.state.tool) ? (
           <Row style={{marginTop: "20px"}}>
             <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
               {this.getProviderUrlLabel(this.state.tool)} :
@@ -256,7 +271,21 @@ class ToolEditPage extends React.Component {
               >
                 <Option value="User Chrome">{i18next.t("tool:User Chrome")}</Option>
                 <Option value="Chrome for Testing">{i18next.t("tool:Chrome for Testing")}</Option>
+                <Option value={YETI_BROWSER_BRIDGE_MODE}>{i18next.t("tool:YetiBrowser Bridge (Experimental)")}</Option>
               </Select>
+            </Col>
+          </Row>
+        ) : null}
+        {this.isYetiBrowserBridgeMode(this.state.tool) ? (
+          <Row style={{marginTop: "12px"}}>
+            <Col span={(Setting.isMobile()) ? 22 : 2} />
+            <Col span={22}>
+              <Alert
+                type="info"
+                showIcon
+                message={i18next.t("tool:YetiBrowser bridge setup")}
+                description={i18next.t("tool:YetiBrowser bridge setup - Description")}
+              />
             </Col>
           </Row>
         ) : null}

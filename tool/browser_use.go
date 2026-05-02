@@ -45,21 +45,43 @@ const (
 	browserUseMaxElements          = 120
 	chromeForTestingEndpoint       = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
 	chromeForTestingDefaultChannel = "Stable"
+	browserUseModeUserChrome       = "User Chrome"
+	browserUseModeChromeForTesting = "Chrome for Testing"
+	browserUseModeYetiBridge       = "YetiBrowser Bridge (Experimental)"
 )
 
 // BrowserUseTool is the Tool Type "browser_use".
 // It opens a visible, persistent Chromium browser for human-observable web tasks.
 type BrowserUseTool struct {
-	sessionKey  string
-	userDataDir string
-	enableProxy bool
-	mode        string
+	sessionKey     string
+	userDataDir    string
+	enableProxy    bool
+	mode           string
+	bridgeAddress  string
+	bridgeClientID string
 }
 
 func NewBrowserUseTool(config Config) (*BrowserUseTool, error) {
 	mode := config.Mode
 	if mode == "" {
-		mode = "User Chrome"
+		mode = browserUseModeUserChrome
+	}
+	if mode == browserUseModeYetiBridge {
+		bridgeAddress, err := parseYetiBridgeAddress(config.ProviderUrl)
+		if err != nil {
+			return nil, err
+		}
+		bridgeClientID := strings.TrimSpace(config.ClientId)
+		if bridgeClientID == "" {
+			bridgeClientID = "casibase"
+		}
+		sessionKey := strings.Join([]string{"yeti", bridgeAddress, bridgeClientID}, "|")
+		return &BrowserUseTool{
+			sessionKey:     sessionKey,
+			mode:           mode,
+			bridgeAddress:  bridgeAddress,
+			bridgeClientID: bridgeClientID,
+		}, nil
 	}
 	userDataDir := defaultBrowserUseDataDir()
 	sessionKey := strings.Join([]string{userDataDir, strconv.FormatBool(config.EnableProxy), mode}, "|")
@@ -162,10 +184,18 @@ func (p *BrowserUseTool) runSession(fn func(session *browserUseSession) error) e
 }
 
 func (p *BrowserUseTool) close() {
+	if p.isYetiBridgeMode() {
+		globalYetiBridgeManager.close(p.bridgeAddress)
+		return
+	}
 	session := globalBrowserUseManager.close(p)
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	session.closeLocked()
+}
+
+func (p *BrowserUseTool) isYetiBridgeMode() bool {
+	return p != nil && p.mode == browserUseModeYetiBridge
 }
 
 func (s *browserUseSession) ensureLocked() error {
@@ -842,6 +872,9 @@ func browserUsePlayMediaScript() string {
 }
 
 func browserUseCurrentState(provider *BrowserUseTool) (string, error) {
+	if provider.isYetiBridgeMode() {
+		return browserUseYetiCurrentState(provider)
+	}
 	var title, rawURL, mediaState string
 	var activeTargetID target.ID
 	var tabs []*target.Info
@@ -1125,6 +1158,9 @@ func browserUseFormatSnapshot(rawURL, title, visibleText string, elements []brow
 }
 
 func browserUseSnapshot(provider *BrowserUseTool) (string, error) {
+	if provider.isYetiBridgeMode() {
+		return browserUseYetiSnapshot(provider)
+	}
 	var elements []browserUseElement
 	var title, rawURL, visibleText string
 	err := provider.run(
@@ -1171,6 +1207,17 @@ func (b *browserUseOpenBuiltin) Execute(ctx context.Context, arguments map[strin
 		return browserToolError("missing required parameter: url"), nil
 	}
 	rawURL = strings.TrimSpace(rawURL)
+
+	if b.provider.isYetiBridgeMode() {
+		if err := browserUseYetiOpen(ctx, b.provider, rawURL); err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use open failed for %s: %s", rawURL, err.Error())), nil
+		}
+		snapshot, err := browserUseSnapshot(b.provider)
+		if err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use snapshot failed after opening %s: %s", rawURL, err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, snapshot), nil
+	}
 
 	if err := b.provider.run(chromedp.Navigate(rawURL), chromedp.WaitReady("body", chromedp.ByQuery)); err != nil {
 		return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use open failed for %s: %s", rawURL, err.Error())), nil
@@ -1243,6 +1290,12 @@ func (b *browserUseClickBuiltin) Execute(ctx context.Context, arguments map[stri
 	selector, err := browserUseSelector(arguments)
 	if err != nil {
 		return browserToolError(err.Error()), nil
+	}
+	if b.provider.isYetiBridgeMode() {
+		if err = browserUseYetiClick(ctx, b.provider, selector); err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use click failed for %s: %s", selector, err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, "Clicked. Call browser_use_snapshot before the next indexed action."), nil
 	}
 	switchedTab := false
 	err = b.provider.runSession(func(session *browserUseSession) error {
@@ -1335,6 +1388,13 @@ func (b *browserUseTypeBuiltin) Execute(ctx context.Context, arguments map[strin
 		clear = value
 	}
 
+	if b.provider.isYetiBridgeMode() {
+		if err = browserUseYetiType(ctx, b.provider, selector, text, clear); err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use type failed for %s: %s", selector, err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, "Typed. Call browser_use_snapshot before the next indexed action or before claiming the page accepted the input."), nil
+	}
+
 	actions := []chromedp.Action{
 		chromedp.ScrollIntoView(selector, chromedp.ByQuery),
 		chromedp.Click(selector, chromedp.ByQuery),
@@ -1414,8 +1474,17 @@ func (b *browserUsePressBuiltin) Execute(ctx context.Context, arguments map[stri
 	if !ok || strings.TrimSpace(key) == "" {
 		return browserToolError("missing required parameter: key"), nil
 	}
-	key = browserUseKey(strings.TrimSpace(key))
+	key = strings.TrimSpace(key)
 
+	if b.provider.isYetiBridgeMode() {
+		yetiKey := browserUseYetiKey(key)
+		if err := browserUseYetiPress(ctx, b.provider, yetiKey); err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use press failed for %s: %s", yetiKey, err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, "Key pressed. Call browser_use_snapshot before the next indexed action."), nil
+	}
+
+	key = browserUseKey(key)
 	switchedTab := false
 	err := b.provider.runSession(func(session *browserUseSession) error {
 		var previousURL string
@@ -1506,6 +1575,14 @@ func (b *browserUsePlayMediaBuiltin) GetInputSchema() interface{} {
 }
 
 func (b *browserUsePlayMediaBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+	if b.provider.isYetiBridgeMode() {
+		result, err := browserUseYetiEvaluateString(ctx, b.provider, browserUsePlayMediaScript())
+		if err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use play media failed: %s", err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, result), nil
+	}
+
 	var result string
 	err := b.provider.run(chromedp.Evaluate(browserUsePlayMediaScript(), &result))
 	if err != nil {
@@ -1535,6 +1612,14 @@ func (b *browserUseTabsBuiltin) GetInputSchema() interface{} {
 }
 
 func (b *browserUseTabsBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+	if b.provider.isYetiBridgeMode() {
+		tabs, err := browserUseYetiTabs(ctx, b.provider)
+		if err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use tabs failed: %s", err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, tabs), nil
+	}
+
 	tabs, err := browserUseListTabs(b.provider)
 	if err != nil {
 		return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use tabs failed: %s", err.Error())), nil
@@ -1569,6 +1654,10 @@ func (b *browserUseSwitchTabBuiltin) GetInputSchema() interface{} {
 }
 
 func (b *browserUseSwitchTabBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+	if b.provider.isYetiBridgeMode() {
+		return browserToolError("browser_use_switch_tab is not supported in YetiBrowser Bridge mode. Switch to the target tab in Chrome and click Connect in the YetiBrowser extension again."), nil
+	}
+
 	rawIndex, ok := arguments["index"]
 	if !ok {
 		return browserToolError("missing required parameter: index"), nil
