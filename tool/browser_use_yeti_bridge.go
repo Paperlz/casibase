@@ -39,14 +39,15 @@ type yetiBridgeManager struct {
 }
 
 type yetiBridgeSession struct {
-	mu       sync.Mutex
-	writeMu  sync.Mutex
-	address  string
-	clientID string
-	server   *http.Server
-	socket   *websocket.Conn
-	hello    *yetiBridgeHello
-	pending  map[string]*yetiBridgePending
+	mu        sync.Mutex
+	writeMu   sync.Mutex
+	address   string
+	clientID  string
+	server    *http.Server
+	socket    *websocket.Conn
+	hello     *yetiBridgeHello
+	pending   map[string]*yetiBridgePending
+	selectors map[int]string
 }
 
 type yetiBridgePending struct {
@@ -62,6 +63,26 @@ type yetiBridgeCallResult struct {
 type yetiBridgeHello struct {
 	Client  string `json:"client"`
 	Version string `json:"version"`
+}
+
+type yetiSnapshotResult struct {
+	Formatted string          `json:"formatted"`
+	Raw       yetiSnapshotRaw `json:"raw"`
+}
+
+type yetiSnapshotRaw struct {
+	Title     string              `json:"title"`
+	URL       string              `json:"url"`
+	Captured  string              `json:"capturedAt"`
+	Entries   []yetiSnapshotEntry `json:"entries"`
+	Visible   string              `json:"visibleText"`
+	PlainText string              `json:"text"`
+}
+
+type yetiSnapshotEntry struct {
+	Selector string `json:"selector"`
+	Role     string `json:"role"`
+	Name     string `json:"name"`
 }
 
 var globalYetiBridgeManager = &yetiBridgeManager{sessions: map[string]*yetiBridgeSession{}}
@@ -159,9 +180,10 @@ func (m *yetiBridgeManager) get(address string, clientID string) (*yetiBridgeSes
 	session, ok := m.sessions[address]
 	if !ok {
 		session = &yetiBridgeSession{
-			address:  address,
-			clientID: clientID,
-			pending:  map[string]*yetiBridgePending{},
+			address:   address,
+			clientID:  clientID,
+			pending:   map[string]*yetiBridgePending{},
+			selectors: map[int]string{},
 		}
 		m.sessions[address] = session
 	}
@@ -456,6 +478,47 @@ func browserUseYetiBridge(provider *BrowserUseTool) (*yetiBridgeSession, error) 
 	return globalYetiBridgeManager.get(provider.bridgeAddress, provider.bridgeClientID)
 }
 
+func browserUseSelectorForProvider(provider *BrowserUseTool, arguments map[string]interface{}) (string, error) {
+	if provider.isYetiBridgeMode() {
+		if rawIndex, ok := arguments["index"]; ok {
+			index, err := browserUsePositiveInt(rawIndex, "index")
+			if err != nil {
+				return "", err
+			}
+			bridge, err := browserUseYetiBridge(provider)
+			if err != nil {
+				return "", err
+			}
+			selector, ok := bridge.selectorForIndex(index)
+			if !ok {
+				return "", fmt.Errorf("element index %d is not available in the latest YetiBrowser snapshot; call browser_use_snapshot again or pass a selector", index)
+			}
+			return selector, nil
+		}
+	}
+	return browserUseSelector(arguments)
+}
+
+func (s *yetiBridgeSession) setSnapshotSelectors(entries []yetiSnapshotEntry) {
+	selectors := map[int]string{}
+	for index, entry := range entries {
+		selector := strings.TrimSpace(entry.Selector)
+		if selector != "" {
+			selectors[index+1] = selector
+		}
+	}
+	s.mu.Lock()
+	s.selectors = selectors
+	s.mu.Unlock()
+}
+
+func (s *yetiBridgeSession) selectorForIndex(index int) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	selector, ok := s.selectors[index]
+	return selector, ok
+}
+
 func browserUseYetiCall(ctx context.Context, provider *BrowserUseTool, command string, payload interface{}, out interface{}) error {
 	bridge, err := browserUseYetiBridge(provider)
 	if err != nil {
@@ -482,28 +545,21 @@ func browserUseYetiSnapshot(provider *BrowserUseTool) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), browserUseDefaultTimeout)
 	defer cancel()
 
-	var urlResult struct {
-		URL string `json:"url"`
+	bridge, err := browserUseYetiBridge(provider)
+	if err != nil {
+		return "", err
 	}
-	var titleResult struct {
-		Title string `json:"title"`
+	raw, err := bridge.call(ctx, "snapshot", map[string]interface{}{})
+	if err != nil {
+		return "", err
 	}
-	var visibleText string
-	var elements []browserUseElement
 
-	if err := browserUseYetiCall(ctx, provider, "getUrl", nil, &urlResult); err != nil {
-		return "", err
+	var snapshot yetiSnapshotResult
+	if err = json.Unmarshal(raw, &snapshot); err != nil {
+		return "", fmt.Errorf("failed to decode YetiBrowser snapshot result: %w", err)
 	}
-	if err := browserUseYetiCall(ctx, provider, "getTitle", nil, &titleResult); err != nil {
-		return "", err
-	}
-	if err := browserUseYetiEvaluate(ctx, provider, browserUseVisibleTextScript(), &visibleText); err != nil {
-		return "", err
-	}
-	if err := browserUseYetiEvaluate(ctx, provider, browserUseSnapshotScript(), &elements); err != nil {
-		return "", err
-	}
-	return browserUseFormatSnapshot(urlResult.URL, titleResult.Title, visibleText, elements), nil
+	bridge.setSnapshotSelectors(snapshot.Raw.Entries)
+	return formatYetiSnapshot(snapshot), nil
 }
 
 func browserUseYetiCurrentState(provider *BrowserUseTool) (string, error) {
@@ -521,19 +577,13 @@ func browserUseYetiCurrentState(provider *BrowserUseTool) (string, error) {
 	var titleResult struct {
 		Title string `json:"title"`
 	}
-	var mediaState string
 	if err = browserUseYetiCall(ctx, provider, "getUrl", nil, &urlResult); err != nil {
 		return "", err
 	}
 	if err = browserUseYetiCall(ctx, provider, "getTitle", nil, &titleResult); err != nil {
 		return "", err
 	}
-	if err = browserUseYetiEvaluate(ctx, provider, browserUseMediaStateScript(), &mediaState); err != nil {
-		mediaState = fmt.Sprintf("unavailable: %s", err.Error())
-	}
-	if strings.TrimSpace(mediaState) == "" {
-		mediaState = "none"
-	}
+	mediaState := "not checked in YetiBrowser Bridge mode"
 
 	bridge.mu.Lock()
 	hello := bridge.hello
@@ -563,41 +613,25 @@ func browserUseYetiClick(ctx context.Context, provider *BrowserUseTool, selector
 }
 
 func browserUseYetiType(ctx context.Context, provider *BrowserUseTool, selector string, text string, clear bool) error {
-	var tag string
-	if err := browserUseYetiEvaluate(ctx, provider, browserUseElementTagScript(selector), &tag); err != nil {
-		return err
-	}
-	if tag == "select" {
-		var result string
-		if err := browserUseYetiEvaluate(ctx, provider, browserUseSelectOptionScript(selector, text), &result); err != nil {
-			return err
-		}
-		if strings.HasPrefix(result, "select option not found") {
-			return fmt.Errorf("%s", result)
-		}
-		return nil
-	}
-
-	var result string
-	script := browserUseSetTextValueScript(selector, text, clear)
-	if !clear {
-		script = browserUseAppendTextValueScript(selector, text)
-	}
-	if err := browserUseYetiEvaluate(ctx, provider, script, &result); err != nil {
-		return err
-	}
-	if result != "fallback" {
-		if strings.HasPrefix(result, "element not found") {
-			return fmt.Errorf("%s", result)
-		}
-		return nil
-	}
-	return browserUseYetiCall(ctx, provider, "type", map[string]interface{}{
+	err := browserUseYetiCall(ctx, provider, "type", map[string]interface{}{
 		"selector":    selector,
 		"text":        text,
 		"submit":      false,
 		"description": selector,
 	}, nil)
+	if err == nil {
+		return nil
+	}
+
+	selectErr := browserUseYetiCall(ctx, provider, "selectOption", map[string]interface{}{
+		"selector":    selector,
+		"values":      []string{text},
+		"description": selector,
+	}, nil)
+	if selectErr == nil {
+		return nil
+	}
+	return fmt.Errorf("%w; select fallback failed: %s", err, selectErr.Error())
 }
 
 func browserUseYetiPress(ctx context.Context, provider *BrowserUseTool, key string) error {
@@ -625,6 +659,48 @@ func browserUseYetiTabs(ctx context.Context, provider *BrowserUseTool) (string, 
 	}
 	builder.WriteString("YetiBrowser Bridge mode controls only the tab connected from the extension. To switch tabs, open the target tab in Chrome and click Connect in the YetiBrowser extension again.\n")
 	return builder.String(), nil
+}
+
+func formatYetiSnapshot(snapshot yetiSnapshotResult) string {
+	if strings.TrimSpace(snapshot.Raw.URL) == "" && strings.TrimSpace(snapshot.Formatted) != "" {
+		return fmt.Sprintf("YetiBrowser snapshot:\n```yaml\n%s\n```\n", strings.TrimSpace(snapshot.Formatted))
+	}
+
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("URL: %s\nTitle: %s\n\n", strings.TrimSpace(snapshot.Raw.URL), strings.TrimSpace(snapshot.Raw.Title)))
+	visibleText := strings.TrimSpace(snapshot.Raw.Visible)
+	if visibleText == "" {
+		visibleText = strings.TrimSpace(snapshot.Raw.PlainText)
+	}
+	if visibleText != "" {
+		builder.WriteString("Visible text:\n")
+		builder.WriteString(visibleText)
+		builder.WriteString("\n\n")
+	}
+	builder.WriteString("Interactive elements:\n")
+	if len(snapshot.Raw.Entries) == 0 {
+		builder.WriteString("No visible interactive elements found.\n")
+		if strings.TrimSpace(snapshot.Formatted) != "" {
+			builder.WriteString("\nRaw YetiBrowser snapshot:\n```yaml\n")
+			builder.WriteString(strings.TrimSpace(snapshot.Formatted))
+			builder.WriteString("\n```\n")
+		}
+		return builder.String()
+	}
+	for index, entry := range snapshot.Raw.Entries {
+		label := strings.TrimSpace(entry.Name)
+		line := fmt.Sprintf("[%d] <element", index+1)
+		if strings.TrimSpace(entry.Role) != "" {
+			line += fmt.Sprintf(` role=%q`, strings.TrimSpace(entry.Role))
+		}
+		if strings.TrimSpace(entry.Selector) != "" {
+			line += fmt.Sprintf(` selector=%q`, strings.TrimSpace(entry.Selector))
+		}
+		line += fmt.Sprintf("> %s", label)
+		builder.WriteString(line)
+		builder.WriteString("\n")
+	}
+	return builder.String()
 }
 
 func browserUseYetiEvaluate(ctx context.Context, provider *BrowserUseTool, script string, out interface{}) error {

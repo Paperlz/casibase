@@ -1287,7 +1287,7 @@ func (b *browserUseClickBuiltin) GetInputSchema() interface{} {
 }
 
 func (b *browserUseClickBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
-	selector, err := browserUseSelector(arguments)
+	selector, err := browserUseSelectorForProvider(b.provider, arguments)
 	if err != nil {
 		return browserToolError(err.Error()), nil
 	}
@@ -1375,7 +1375,7 @@ func (b *browserUseTypeBuiltin) GetInputSchema() interface{} {
 }
 
 func (b *browserUseTypeBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
-	selector, err := browserUseSelector(arguments)
+	selector, err := browserUseSelectorForProvider(b.provider, arguments)
 	if err != nil {
 		return browserToolError(err.Error()), nil
 	}
