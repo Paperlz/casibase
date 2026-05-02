@@ -81,6 +81,7 @@ func (p *BrowserUseTool) BuiltinTools() []builtin_tool.BuiltinTool {
 		&browserUsePlayMediaBuiltin{provider: p},
 		&browserUseTabsBuiltin{provider: p},
 		&browserUseSwitchTabBuiltin{provider: p},
+		&browserUseCloseTabBuiltin{provider: p},
 		&browserUseCloseBuiltin{provider: p},
 	}
 }
@@ -754,6 +755,23 @@ func (s *browserUseSession) switchToNewTargetLocked(before map[target.ID]bool, p
 }
 
 func browserUseListTabs(provider *BrowserUseTool) ([]browserUseTab, error) {
+	if provider.isChromeMCPBridge() {
+		mcpTabs, err := chromeMCPTabs(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		tabs := make([]browserUseTab, 0, len(mcpTabs))
+		for _, tab := range mcpTabs {
+			tabs = append(tabs, browserUseTab{
+				Index:  tab.Index,
+				ID:     target.ID(strconv.Itoa(tab.TabID)),
+				Title:  tab.Title,
+				URL:    tab.URL,
+				Active: tab.Active,
+			})
+		}
+		return tabs, nil
+	}
 	var tabs []browserUseTab
 	err := provider.runSession(func(session *browserUseSession) error {
 		activeTargetID := session.currentTargetIDLocked()
@@ -842,6 +860,9 @@ func browserUsePlayMediaScript() string {
 }
 
 func browserUseCurrentState(provider *BrowserUseTool) (string, error) {
+	if provider.isChromeMCPBridge() {
+		return chromeMCPCurrentState(context.Background())
+	}
 	var title, rawURL, mediaState string
 	var activeTargetID target.ID
 	var tabs []*target.Info
@@ -1125,6 +1146,9 @@ func browserUseFormatSnapshot(rawURL, title, visibleText string, elements []brow
 }
 
 func browserUseSnapshot(provider *BrowserUseTool) (string, error) {
+	if provider.isChromeMCPBridge() {
+		return chromeMCPSnapshot(context.Background())
+	}
 	var elements []browserUseElement
 	var title, rawURL, visibleText string
 	err := provider.run(
@@ -1171,6 +1195,17 @@ func (b *browserUseOpenBuiltin) Execute(ctx context.Context, arguments map[strin
 		return browserToolError("missing required parameter: url"), nil
 	}
 	rawURL = strings.TrimSpace(rawURL)
+
+	if b.provider.isChromeMCPBridge() {
+		if _, err := chromeMCPCallTool(ctx, "chrome_navigate", map[string]interface{}{"url": rawURL}); err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use open failed for %s: %s", rawURL, err.Error())), nil
+		}
+		snapshot, err := chromeMCPSnapshot(ctx)
+		if err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use snapshot failed after opening %s: %s", rawURL, err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, snapshot), nil
+	}
 
 	if err := b.provider.run(chromedp.Navigate(rawURL), chromedp.WaitReady("body", chromedp.ByQuery)); err != nil {
 		return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use open failed for %s: %s", rawURL, err.Error())), nil
@@ -1240,6 +1275,18 @@ func (b *browserUseClickBuiltin) GetInputSchema() interface{} {
 }
 
 func (b *browserUseClickBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+	if b.provider.isChromeMCPBridge() {
+		args, label, err := chromeMCPElementArgs(arguments, true)
+		if err != nil {
+			return browserToolError(err.Error()), nil
+		}
+		args["waitForNavigation"] = false
+		if _, err = chromeMCPCallTool(ctx, "chrome_click_element", args); err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use click failed for %s: %s", label, err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, "Clicked. Call browser_use_snapshot before the next indexed action."), nil
+	}
+
 	selector, err := browserUseSelector(arguments)
 	if err != nil {
 		return browserToolError(err.Error()), nil
@@ -1322,6 +1369,47 @@ func (b *browserUseTypeBuiltin) GetInputSchema() interface{} {
 }
 
 func (b *browserUseTypeBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+	if b.provider.isChromeMCPBridge() {
+		args, label, err := chromeMCPElementArgs(arguments, false)
+		if err != nil {
+			return browserToolError(err.Error()), nil
+		}
+		text, ok := arguments["text"].(string)
+		if !ok {
+			return browserToolError("missing required parameter: text"), nil
+		}
+		clear := true
+		if value, ok := arguments["clear"].(bool); ok {
+			clear = value
+		}
+		if clear {
+			args["value"] = text
+			if _, err = chromeMCPCallTool(ctx, "chrome_fill_or_select", args); err != nil {
+				return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use type failed for %s: %s", label, err.Error())), nil
+			}
+		} else {
+			clickArgs := map[string]interface{}{}
+			for key, value := range args {
+				clickArgs[key] = value
+			}
+			delete(clickArgs, "value")
+			if _, err = chromeMCPCallTool(ctx, "chrome_click_element", clickArgs); err != nil {
+				return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use focus failed for %s: %s", label, err.Error())), nil
+			}
+			keyArgs := map[string]interface{}{"keys": text}
+			if tabID, ok := args["tabId"]; ok {
+				keyArgs["tabId"] = tabID
+			}
+			if windowID, ok := args["windowId"]; ok {
+				keyArgs["windowId"] = windowID
+			}
+			if _, err = chromeMCPCallTool(ctx, "chrome_keyboard", keyArgs); err != nil {
+				return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use type failed for %s: %s", label, err.Error())), nil
+			}
+		}
+		return browserUseTextWithState(b.provider, "Typed. Call browser_use_snapshot before the next indexed action or before claiming the page accepted the input."), nil
+	}
+
 	selector, err := browserUseSelector(arguments)
 	if err != nil {
 		return browserToolError(err.Error()), nil
@@ -1416,6 +1504,13 @@ func (b *browserUsePressBuiltin) Execute(ctx context.Context, arguments map[stri
 	}
 	key = browserUseKey(strings.TrimSpace(key))
 
+	if b.provider.isChromeMCPBridge() {
+		if _, err := chromeMCPCallTool(ctx, "chrome_keyboard", map[string]interface{}{"keys": key}); err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use press failed for %s: %s", key, err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, "Key pressed. Call browser_use_snapshot before the next indexed action."), nil
+	}
+
 	switchedTab := false
 	err := b.provider.runSession(func(session *browserUseSession) error {
 		var previousURL string
@@ -1506,6 +1601,18 @@ func (b *browserUsePlayMediaBuiltin) GetInputSchema() interface{} {
 }
 
 func (b *browserUsePlayMediaBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+	if b.provider.isChromeMCPBridge() {
+		text, err := chromeMCPCallTool(ctx, "chrome_javascript", map[string]interface{}{
+			"code":           "return " + browserUsePlayMediaScript(),
+			"timeoutMs":      10000,
+			"maxOutputBytes": 8192,
+		})
+		if err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use play media failed: %s", err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, chromeMCPJavaScriptResult(text)), nil
+	}
+
 	var result string
 	err := b.provider.run(chromedp.Evaluate(browserUsePlayMediaScript(), &result))
 	if err != nil {
@@ -1535,6 +1642,14 @@ func (b *browserUseTabsBuiltin) GetInputSchema() interface{} {
 }
 
 func (b *browserUseTabsBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+	if b.provider.isChromeMCPBridge() {
+		tabs, err := chromeMCPTabs(ctx)
+		if err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use tabs failed: %s", err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, chromeMCPFormatTabs(tabs)), nil
+	}
+
 	tabs, err := browserUseListTabs(b.provider)
 	if err != nil {
 		return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use tabs failed: %s", err.Error())), nil
@@ -1578,6 +1693,34 @@ func (b *browserUseSwitchTabBuiltin) Execute(ctx context.Context, arguments map[
 		return browserToolError(err.Error()), nil
 	}
 
+	if b.provider.isChromeMCPBridge() {
+		tab, ok := globalChromeMCPBridge.tabByIndex(index)
+		if !ok {
+			tabs, tabsErr := chromeMCPTabs(ctx)
+			if tabsErr != nil {
+				return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use switch tab failed: %s", tabsErr.Error())), nil
+			}
+			for _, item := range tabs {
+				if item.Index == index {
+					tab = item
+					ok = true
+					break
+				}
+			}
+		}
+		if !ok {
+			return browserToolError(fmt.Sprintf("tab index %d is out of range", index)), nil
+		}
+		if _, err = chromeMCPCallTool(ctx, "chrome_switch_tab", map[string]interface{}{"tabId": tab.TabID, "windowId": tab.WindowID}); err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use switch tab failed: %s", err.Error())), nil
+		}
+		snapshot, err := chromeMCPSnapshot(ctx)
+		if err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use snapshot failed after switching tabs: %s", err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, snapshot), nil
+	}
+
 	err = b.provider.runSession(func(session *browserUseSession) error {
 		tabs, err := session.pageTargetsLocked()
 		if err != nil {
@@ -1597,6 +1740,116 @@ func (b *browserUseSwitchTabBuiltin) Execute(ctx context.Context, arguments map[
 		return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use snapshot failed after switching tabs: %s", err.Error())), nil
 	}
 	return browserUseTextWithState(b.provider, snapshot), nil
+}
+
+// ---------------------------------------------------------------------------
+// browser_use_close_tab
+// ---------------------------------------------------------------------------
+
+type browserUseCloseTabBuiltin struct{ provider *BrowserUseTool }
+
+func (b *browserUseCloseTabBuiltin) GetName() string { return "browser_use_close_tab" }
+
+func (b *browserUseCloseTabBuiltin) GetDescription() string {
+	return "Close a browser tab. Pass an index from browser_use_tabs to close that tab; omit index to close the active tab. This closes only a tab, not the whole Browser Use session."
+}
+
+func (b *browserUseCloseTabBuiltin) GetInputSchema() interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]interface{}{
+			"index": map[string]interface{}{
+				"type":        "integer",
+				"description": "Optional tab index returned by browser_use_tabs. If omitted, closes the active tab.",
+			},
+		},
+	}
+}
+
+func (b *browserUseCloseTabBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+	if b.provider.isChromeMCPBridge() {
+		args := map[string]interface{}{}
+		if rawIndex, ok := arguments["index"]; ok {
+			index, err := browserUsePositiveInt(rawIndex, "index")
+			if err != nil {
+				return browserToolError(err.Error()), nil
+			}
+			tab, ok := globalChromeMCPBridge.tabByIndex(index)
+			if !ok {
+				tabs, tabsErr := chromeMCPTabs(ctx)
+				if tabsErr != nil {
+					return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use close tab failed: %s", tabsErr.Error())), nil
+				}
+				for _, item := range tabs {
+					if item.Index == index {
+						tab = item
+						ok = true
+						break
+					}
+				}
+			}
+			if !ok {
+				return browserToolError(fmt.Sprintf("tab index %d is out of range", index)), nil
+			}
+			args["tabIds"] = []int{tab.TabID}
+		}
+		if _, err := chromeMCPCallTool(ctx, "chrome_close_tabs", args); err != nil {
+			return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use close tab failed: %s", err.Error())), nil
+		}
+		return browserUseTextWithState(b.provider, "Tab closed."), nil
+	}
+
+	var closedTarget target.ID
+	err := b.provider.runSession(func(session *browserUseSession) error {
+		tabs, err := session.pageTargetsLocked()
+		if err != nil {
+			return err
+		}
+		if len(tabs) == 0 {
+			return fmt.Errorf("no browser tabs found")
+		}
+		targetID := session.currentTargetIDLocked()
+		if rawIndex, ok := arguments["index"]; ok {
+			index, err := browserUsePositiveInt(rawIndex, "index")
+			if err != nil {
+				return err
+			}
+			if index > len(tabs) {
+				return fmt.Errorf("tab index %d is out of range; there are %d tabs", index, len(tabs))
+			}
+			targetID = tabs[index-1].TargetID
+		}
+		if targetID == "" {
+			return fmt.Errorf("active tab target is unknown")
+		}
+		closedTarget = targetID
+		targetCtx, cancelTarget := chromedp.NewContext(session.browserCtx, chromedp.WithTargetID(targetID))
+		defer cancelTarget()
+		timeoutCtx, cancel := context.WithTimeout(targetCtx, browserUseDefaultTimeout)
+		defer cancel()
+		return chromedp.Run(timeoutCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+			chromeContext := chromedp.FromContext(ctx)
+			if chromeContext == nil || chromeContext.Browser == nil {
+				return fmt.Errorf("browser context is not ready")
+			}
+			return target.CloseTarget(targetID).Do(cdp.WithExecutor(ctx, chromeContext.Browser))
+		}))
+	})
+	if err != nil {
+		return browserUseErrorWithState(b.provider, fmt.Sprintf("browser use close tab failed: %s", err.Error())), nil
+	}
+	_ = b.provider.runSession(func(session *browserUseSession) error {
+		if session.activeTargetID != closedTarget {
+			return nil
+		}
+		tabs, err := session.pageTargetsLocked()
+		if err != nil || len(tabs) == 0 {
+			return err
+		}
+		return session.switchToTargetLocked(tabs[0].TargetID)
+	})
+	return browserUseTextWithState(b.provider, "Tab closed."), nil
 }
 
 // ---------------------------------------------------------------------------

@@ -971,6 +971,8 @@
     "Function name": "Function name",
     "Functions": "Functions",
     "Functions - Tooltip": "Functions - Tooltip",
+    "MCP Chrome Bridge (Experimental)": "MCP Chrome Bridge (Experimental)",
+    "MCP Chrome Bridge hint": "Install and enable the mcp-chrome extension, run: openagent chrome-mcp-register --server http://127.0.0.1:14000, then connect the extension. Browser Use will operate on your current Chrome tabs.",
     "Prompt examples": "Prompt examples",
     "Prompt examples - Tooltip": "Prompt examples - Tooltip",
     "User Chrome": "User Chrome"

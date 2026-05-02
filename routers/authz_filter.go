@@ -81,6 +81,7 @@ func permissionFilter(ctx *context.Context) {
 		"analyze-task",
 		"claim-store",
 		"is-session-duplicated",
+		"browser-use/chrome-mcp/native-host",
 	}
 
 	for _, exemptPath := range exemptedPaths {

@@ -16,9 +16,12 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/the-open-agent/openagent/tool"
 )
 
 const progName = "openagent"
@@ -44,6 +47,10 @@ func EarlyDispatch() (handled bool, exitCode int, openBrowser bool) {
 		case "-h", "--help", "help":
 			printHelp()
 			return true, 0, false
+		case "chrome-mcp-register":
+			return runChromeMCPRegister(os.Args[2:]), 0, false
+		case "chrome-mcp-native-host":
+			return runChromeMCPNativeHost(os.Args[2:]), 0, false
 		case "serve", "gateway", "run", "start":
 			// Match OpenClaw-style explicit "gateway" while keeping zero-arg default as serve.
 			os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
@@ -84,6 +91,9 @@ Usage:
   %[1]s serve               Start the HTTP server (explicit)
   %[1]s gateway             Same as serve (OpenClaw-style alias)
   %[1]s run | start         Same as serve
+  %[1]s chrome-mcp-register Register the mcp-chrome native host bridge
+  %[1]s chrome-mcp-native-host
+                            Internal command used by Chrome Native Messaging
   %[1]s version             Print version (%[1]s -v, %[1]s --version)
   %[1]s help                Show this help (%[1]s -h, %[1]s --help)
 
@@ -94,7 +104,38 @@ Examples:
   %[1]s
   %[1]s gateway
   %[1]s serve -createDatabase
+  %[1]s chrome-mcp-register --server http://127.0.0.1:14000
 
 Release builds can embed version via go build -ldflags (see internal/cli.Version).
 `, exe)
+}
+
+func runChromeMCPRegister(args []string) bool {
+	fs := flag.NewFlagSet("chrome-mcp-register", flag.ContinueOnError)
+	serverURL := fs.String("server", "http://127.0.0.1:14000", "Casibase server URL")
+	extensionID := fs.String("extension-id", "", "mcp-chrome extension ID")
+	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+	if err := tool.RegisterChromeMCPNativeHost(tool.ChromeMCPRegisterOptions{
+		ServerURL:   *serverURL,
+		ExtensionID: *extensionID,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "chrome-mcp-register failed: %v\n", err)
+		os.Exit(1)
+	}
+	return true
+}
+
+func runChromeMCPNativeHost(args []string) bool {
+	fs := flag.NewFlagSet("chrome-mcp-native-host", flag.ContinueOnError)
+	configPath := fs.String("config", "", "Chrome MCP native host config path")
+	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+	if err := tool.RunChromeMCPNativeHost(*configPath); err != nil {
+		fmt.Fprintf(os.Stderr, "chrome-mcp-native-host stopped: %v\n", err)
+		os.Exit(1)
+	}
+	return true
 }

@@ -14,7 +14,7 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import {Button, Card, Col, Input, Row, Select, Switch, Table, Tag} from "antd";
+import {Alert, Button, Card, Col, Input, Row, Select, Switch, Table, Tag} from "antd";
 import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
@@ -256,7 +256,16 @@ class ToolEditPage extends React.Component {
               >
                 <Option value="User Chrome">{i18next.t("tool:User Chrome")}</Option>
                 <Option value="Chrome for Testing">{i18next.t("tool:Chrome for Testing")}</Option>
+                <Option value="MCP Chrome Bridge (Experimental)">{i18next.t("tool:MCP Chrome Bridge (Experimental)")}</Option>
               </Select>
+            </Col>
+          </Row>
+        ) : null}
+        {this.state.tool.type === "browser_use" && this.state.tool.mode === "MCP Chrome Bridge (Experimental)" ? (
+          <Row style={{marginTop: "20px"}}>
+            <Col span={(Setting.isMobile()) ? 22 : 2} />
+            <Col span={22}>
+              <Alert type="info" showIcon message={i18next.t("tool:MCP Chrome Bridge hint")} />
             </Col>
           </Row>
         ) : null}

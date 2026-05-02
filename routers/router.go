@@ -93,6 +93,7 @@ func initAPI() {
 	beego.Router("/api/add-tool", &controllers.ApiController{}, "POST:AddTool")
 	beego.Router("/api/delete-tool", &controllers.ApiController{}, "POST:DeleteTool")
 	beego.Router("/api/test-tool", &controllers.ApiController{}, "POST:TestTool")
+	beego.Router("/api/browser-use/chrome-mcp/native-host", &controllers.ApiController{}, "GET:BrowserUseChromeMCPNativeHost")
 
 	beego.Router("/api/get-global-files", &controllers.ApiController{}, "GET:GetGlobalFiles")
 	beego.Router("/api/get-files", &controllers.ApiController{}, "GET:GetFiles")
