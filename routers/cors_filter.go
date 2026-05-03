@@ -48,6 +48,10 @@ func setCorsHeaders(ctx *context.Context, origin string) {
 }
 
 func CorsFilter(ctx *context.Context) {
+	if ctx.Request.URL.Path == "/api/chrome-connect" {
+		return
+	}
+
 	origin := ctx.Input.Header(headerOrigin)
 
 	if origin == "" || origin == "null" {

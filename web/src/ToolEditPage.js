@@ -14,7 +14,7 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import {Button, Card, Col, Input, Row, Select, Switch, Table, Tag} from "antd";
+import {Alert, Button, Card, Col, Input, Row, Select, Switch, Table, Tag} from "antd";
 import * as ToolBackend from "./backend/ToolBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
@@ -256,7 +256,20 @@ class ToolEditPage extends React.Component {
               >
                 <Option value="User Chrome">{i18next.t("tool:User Chrome")}</Option>
                 <Option value="Chrome for Testing">{i18next.t("tool:Chrome for Testing")}</Option>
+                <Option value="OpenAgent Chrome Extension">OpenAgent Chrome Extension</Option>
               </Select>
+            </Col>
+          </Row>
+        ) : null}
+        {this.state.tool.type === "browser_use" && this.state.tool.mode === "OpenAgent Chrome Extension" ? (
+          <Row style={{marginTop: "20px"}}>
+            <Col span={(Setting.isMobile()) ? 22 : 2} />
+            <Col span={22}>
+              <Alert
+                type="info"
+                showIcon
+                message="Install the OpenAgent Chrome extension, open the extension popup, enter http://127.0.0.1:14000, click Connect, then Browser Use will operate your current Chrome tabs."
+              />
             </Col>
           </Row>
         ) : null}
