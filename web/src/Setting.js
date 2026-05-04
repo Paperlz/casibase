@@ -1107,7 +1107,7 @@ export function getOtherProviderInfo() {
         url: "https://github.com/the-open-agent/openagent",
       },
       local_file: {
-        logo: `${StaticBaseUrl}/img/social_file.png`,
+        logo: `${StaticBaseUrl}/img/social_mcp.png`,
         url: "https://github.com/the-open-agent/openagent",
       },
       office: {
