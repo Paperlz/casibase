@@ -212,7 +212,12 @@ func localFileSliceText(text string, offset, limit int) (string, bool) {
 	return string(runes[offset:end]), truncated
 }
 
-func localFileReadDocument(path, ext, lang string) (string, error) {
+func localFileReadDocument(path, ext, lang string) (text string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("failed to parse document: %v", r)
+		}
+	}()
 	return txt.GetParsedTextFromUrl(path, ext, lang)
 }
 
