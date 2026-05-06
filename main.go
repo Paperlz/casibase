@@ -15,10 +15,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/beego/beego"
 	"github.com/beego/beego/logs"
@@ -26,6 +29,7 @@ import (
 	"github.com/the-open-agent/openagent/authz"
 	"github.com/the-open-agent/openagent/conf"
 	"github.com/the-open-agent/openagent/internal/cli"
+	"github.com/the-open-agent/openagent/internal/localocr"
 	"github.com/the-open-agent/openagent/object"
 	"github.com/the-open-agent/openagent/proxy"
 	"github.com/the-open-agent/openagent/routers"
@@ -102,11 +106,27 @@ func main() {
 	}
 
 	port := beego.AppConfig.DefaultInt("httpport", 14000)
-
 	err = util.StopOldInstance(port)
 	if err != nil {
 		panic(err)
 	}
+
+	ctx, stopSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignal()
+
+	ocrManager, err := localocr.Start(ctx)
+	if err != nil {
+		logs.Warning("Local OCR service is unavailable: %v", err)
+	} else {
+		defer ocrManager.Stop()
+	}
+	go func() {
+		<-ctx.Done()
+		if ocrManager != nil {
+			ocrManager.Stop()
+		}
+		os.Exit(0)
+	}()
 
 	go object.ClearThroughputPerSecond()
 
