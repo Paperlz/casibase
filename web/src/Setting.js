@@ -452,9 +452,9 @@ export function getToolFunctions(tool) {
         testContent: JSON.stringify({tool: "local_special_dirs", arguments: {}}, null, 2),
       },
       {
-        name: "local_documents_scan",
-        description: "Scan an absolute local directory for supported documents",
-        testContent: JSON.stringify({tool: "local_documents_scan", arguments: {root: "/absolute/path/to/Desktop", preview_chars: 1200}}, null, 2),
+        name: "local_file_scan",
+        description: "Scan an absolute local directory for all files and subdirectories",
+        testContent: JSON.stringify({tool: "local_file_scan", arguments: {root: "/absolute/path/to/Desktop"}}, null, 2),
       },
       {
         name: "local_document_read",
