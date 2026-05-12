@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/the-open-agent/openagent/txt"
@@ -44,8 +45,8 @@ func (p *LocalFileTool) BuiltinTools() []BuiltinTool {
 	return []BuiltinTool{
 		&localSpecialDirsBuiltin{},
 		&localFileScanBuiltin{},
-		&localDocumentReadBuiltin{lang: p.lang},
-		&localTextWriteBuiltin{},
+		&localFileReadBuiltin{lang: p.lang},
+		&localFileWriteBuiltin{},
 		&localFileMoveBuiltin{},
 	}
 }
@@ -80,7 +81,7 @@ type localFileScanResult struct {
 	Items []localFileScanItem `json:"items"`
 }
 
-type localDocumentReadResult struct {
+type localFileReadResult struct {
 	Path       string `json:"path"`
 	Extension  string `json:"extension"`
 	Offset     int    `json:"offset"`
@@ -90,7 +91,7 @@ type localDocumentReadResult struct {
 	Truncated  bool   `json:"truncated"`
 }
 
-type localTextWriteResult struct {
+type localFileWriteResult struct {
 	Path      string `json:"path"`
 	ByteSize  int    `json:"byteSize"`
 	Overwrote bool   `json:"overwrote"`
@@ -204,8 +205,18 @@ func localFileSliceText(text string, offset, limit int) (string, bool) {
 	return string(runes[offset:end]), truncated
 }
 
-func localFileReadDocument(path, ext, lang string) (string, error) {
-	return txt.GetParsedTextFromUrl(path, ext, lang)
+func localFileReadText(path, ext, lang string) (string, error) {
+	if _, ok := localFileSupportedExt(path); ok {
+		return txt.GetParsedTextFromUrl(path, ext, lang)
+	}
+	bs, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if !utf8.Valid(bs) {
+		return "", fmt.Errorf("file content is not valid UTF-8 text")
+	}
+	return string(bs), nil
 }
 
 func localFileDirectory(path string) localSpecialDirInfo {
@@ -346,32 +357,34 @@ func (b *localFileScanBuiltin) Execute(_ context.Context, arguments map[string]i
 	}), nil
 }
 
-type localDocumentReadBuiltin struct {
+type localFileReadBuiltin struct {
 	lang string
 }
 
-func (b *localDocumentReadBuiltin) GetName() string {
-	return "local_document_read"
+func (b *localFileReadBuiltin) GetName() string {
+	return "local_file_read"
 }
 
-func (b *localDocumentReadBuiltin) GetDescription() string {
-	return `Read text from one supported local document.
+func (b *localFileReadBuiltin) GetDescription() string {
+	return `Read text from a local file.
 - path (required): absolute file path for the current operating system.
-- offset: character offset in extracted text (default 0).
+- For supported document types, extracts text with the document parser.
+- For other files, reads UTF-8 text directly.
+- offset: character offset in returned text (default 0).
 - limit: maximum characters to return (default 12000, max 100000).`
 }
 
-func (b *localDocumentReadBuiltin) GetInputSchema() interface{} {
+func (b *localFileReadBuiltin) GetInputSchema() interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
 			"path": map[string]interface{}{
 				"type":        "string",
-				"description": "Absolute path to a supported document.",
+				"description": "Absolute path to a file.",
 			},
 			"offset": map[string]interface{}{
 				"type":        "number",
-				"description": "Character offset in extracted text (default 0).",
+				"description": "Character offset in returned text (default 0).",
 			},
 			"limit": map[string]interface{}{
 				"type":        "number",
@@ -382,7 +395,7 @@ func (b *localDocumentReadBuiltin) GetInputSchema() interface{} {
 	}
 }
 
-func (b *localDocumentReadBuiltin) Execute(_ context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+func (b *localFileReadBuiltin) Execute(_ context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
 	path := localFileStringArg(arguments, "path")
 	if err := localFileRequireAbsolutePath(path, "path"); err != nil {
 		return localFileError(err.Error()), nil
@@ -394,10 +407,7 @@ func (b *localDocumentReadBuiltin) Execute(_ context.Context, arguments map[stri
 	if info.IsDir() {
 		return localFileError("path must be a file"), nil
 	}
-	ext, ok := localFileSupportedExt(path)
-	if !ok {
-		return localFileError(fmt.Sprintf("unsupported file type: %s", ext)), nil
-	}
+	ext := strings.ToLower(filepath.Ext(path))
 
 	offset := localFileIntArg(arguments, "offset", 0)
 	if offset < 0 {
@@ -406,13 +416,13 @@ func (b *localDocumentReadBuiltin) Execute(_ context.Context, arguments map[stri
 	limit := localFileIntArg(arguments, "limit", localFileDefaultReadLimit)
 	limit = localFileClamp(limit, 0, localFileMaxReadLimit)
 
-	text, err := localFileReadDocument(path, ext, b.lang)
+	text, err := localFileReadText(path, ext, b.lang)
 	if err != nil {
-		return localFileError(fmt.Sprintf("failed to read document: %s", err.Error())), nil
+		return localFileError(fmt.Sprintf("failed to read file: %s", err.Error())), nil
 	}
 	section, truncated := localFileSliceText(text, offset, limit)
 
-	return localFileJSON(localDocumentReadResult{
+	return localFileJSON(localFileReadResult{
 		Path:       path,
 		Extension:  ext,
 		Offset:     offset,
@@ -423,20 +433,20 @@ func (b *localDocumentReadBuiltin) Execute(_ context.Context, arguments map[stri
 	}), nil
 }
 
-type localTextWriteBuiltin struct{}
+type localFileWriteBuiltin struct{}
 
-func (b *localTextWriteBuiltin) GetName() string {
-	return "local_text_write"
+func (b *localFileWriteBuiltin) GetName() string {
+	return "local_file_write"
 }
 
-func (b *localTextWriteBuiltin) GetDescription() string {
-	return `Write Markdown or plain text content to a local file.
+func (b *localFileWriteBuiltin) GetDescription() string {
+	return `Write text content to a local file.
 - path (required): absolute output file path for the current operating system.
 - content (required): text content to write.
 - overwrite: set true to replace an existing file (default false).`
 }
 
-func (b *localTextWriteBuiltin) GetInputSchema() interface{} {
+func (b *localFileWriteBuiltin) GetInputSchema() interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -446,7 +456,7 @@ func (b *localTextWriteBuiltin) GetInputSchema() interface{} {
 			},
 			"content": map[string]interface{}{
 				"type":        "string",
-				"description": "Markdown or plain text content to write.",
+				"description": "Text content to write.",
 			},
 			"overwrite": map[string]interface{}{
 				"type":        "boolean",
@@ -457,7 +467,7 @@ func (b *localTextWriteBuiltin) GetInputSchema() interface{} {
 	}
 }
 
-func (b *localTextWriteBuiltin) Execute(_ context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+func (b *localFileWriteBuiltin) Execute(_ context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
 	path := localFileStringArg(arguments, "path")
 	if err := localFileRequireAbsolutePath(path, "path"); err != nil {
 		return localFileError(err.Error()), nil
@@ -501,7 +511,7 @@ func (b *localTextWriteBuiltin) Execute(_ context.Context, arguments map[string]
 		}
 	}
 
-	return localFileJSON(localTextWriteResult{
+	return localFileJSON(localFileWriteResult{
 		Path:      path,
 		ByteSize:  len([]byte(content)),
 		Overwrote: overwrote,
