@@ -182,6 +182,7 @@ class StoreListPage extends BaseListPage {
       tools: ["All"],
       isDefault: false,
       state: "Active",
+      enableExperienceReview: false,
       enableExtraOptions: false,
     };
   }

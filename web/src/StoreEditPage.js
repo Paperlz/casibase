@@ -715,6 +715,14 @@ class StoreEditPage extends React.Component {
               },
               8
             )}
+            {this.renderStoreSwitch(
+              Setting.getLabel(i18next.t("store:Enable experience review"), i18next.t("store:Enable experience review - Tooltip")),
+              store.enableExperienceReview,
+              checked => {
+                this.updateStoreField("enableExperienceReview", checked);
+              },
+              8
+            )}
           </Row>
         </SectionCard>
 
