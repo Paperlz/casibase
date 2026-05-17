@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Link, useLocation, useNavigate } from "react-router"
-import { LogOutIcon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react"
+import { CheckIcon, LanguagesIcon, LogOutIcon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react"
 import { type Account } from "~/backend/AccountBackend"
 
 import {
@@ -22,6 +22,7 @@ import {
 import { Separator } from "~/components/ui/separator"
 import { SidebarTrigger } from "~/components/ui/sidebar"
 import { useTheme } from "~/hooks/useTheme"
+import i18n, { getLanguage, setLanguage } from "~/i18n"
 
 const RESOURCE_LABELS: Record<string, string> = {
   stores: "Stores",
@@ -70,6 +71,47 @@ function useBreadcrumbs(pathname: string) {
 type AppHeaderProps = {
   account?: Account
   onSignOut?: () => void
+}
+
+const languageOptions = [
+  { value: "en", label: "English" },
+  { value: "zh", label: "中文" },
+] as const
+
+function LanguageSelect() {
+  const [language, setCurrentLanguage] = React.useState<"en" | "zh">(getLanguage())
+
+  React.useEffect(() => {
+    const handleLanguageChanged = () => setCurrentLanguage(getLanguage())
+    i18n.on("languageChanged", handleLanguageChanged)
+    return () => {
+      i18n.off("languageChanged", handleLanguageChanged)
+    }
+  }, [])
+
+  function handleSelect(value: "en" | "zh") {
+    setCurrentLanguage(value)
+    setLanguage(value)
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Change language"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      >
+        <LanguagesIcon className="h-4 w-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-32">
+        {languageOptions.map((option) => (
+          <DropdownMenuItem key={option.value} onClick={() => handleSelect(option.value)}>
+            <span>{option.label}</span>
+            {language === option.value && <CheckIcon className="ml-auto h-4 w-4" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 export function AppHeader({ account, onSignOut }: AppHeaderProps) {
@@ -123,6 +165,8 @@ export function AppHeader({ account, onSignOut }: AppHeaderProps) {
 
       {/* Right side */}
       <div className="ml-auto flex items-center gap-1">
+        <LanguageSelect />
+
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
