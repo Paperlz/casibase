@@ -1,5 +1,6 @@
 import * as React from "react"
 import { Link, useLocation, useNavigate } from "react-router"
+import { useTranslation } from "react-i18next"
 import { GlobeIcon, LogOutIcon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react"
 import { type Account } from "~/backend/AccountBackend"
 import { getLanguage, setLanguage } from "~/i18n"
@@ -63,9 +64,14 @@ function useBreadcrumbs(pathname: string) {
   }
 
   const last = segments[segments.length - 1]
-  const detailLabel = RESOURCE_LABELS[last] ?? last
+  const detailLabel = RESOURCE_LABELS[last]
 
-  return { listLabel: label, listUrl: `/${root}`, detail: detailLabel }
+  return {
+    listLabel: label,
+    listUrl: `/${root}`,
+    detail: detailLabel ?? last,
+    detailIsResource: Boolean(detailLabel),
+  }
 }
 
 type AppHeaderProps = {
@@ -96,9 +102,10 @@ function useHoverDropdown() {
 export function AppHeader({ account, onSignOut }: AppHeaderProps) {
   const location = useLocation()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { theme, toggleTheme } = useTheme()
   const breadcrumbs = useBreadcrumbs(location.pathname)
-  const [lang, setLang] = React.useState(() => getLanguage())
+  const language = getLanguage()
   const langDropdown = useHoverDropdown()
   const accountDropdown = useHoverDropdown()
 
@@ -121,24 +128,26 @@ export function AppHeader({ account, onSignOut }: AppHeaderProps) {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink render={<Link to="/" />}>Home</BreadcrumbLink>
+              <BreadcrumbLink render={<Link to="/" />}>{t("general:Home")}</BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             {breadcrumbs.detail ? (
               <>
                 <BreadcrumbItem>
                   <BreadcrumbLink render={<Link to={breadcrumbs.listUrl} />}>
-                    {breadcrumbs.listLabel}
+                    {t(`general:${breadcrumbs.listLabel}`)}
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem>
-                  <BreadcrumbPage>{breadcrumbs.detail}</BreadcrumbPage>
+                  <BreadcrumbPage>
+                    {breadcrumbs.detailIsResource ? t(`general:${breadcrumbs.detail}`) : breadcrumbs.detail}
+                  </BreadcrumbPage>
                 </BreadcrumbItem>
               </>
             ) : (
               <BreadcrumbItem>
-                <BreadcrumbPage>{breadcrumbs.listLabel}</BreadcrumbPage>
+                <BreadcrumbPage>{t(`general:${breadcrumbs.listLabel}`)}</BreadcrumbPage>
               </BreadcrumbItem>
             )}
           </BreadcrumbList>
@@ -162,10 +171,9 @@ export function AppHeader({ account, onSignOut }: AppHeaderProps) {
                   key={key}
                   onClick={() => {
                     setLanguage(key)
-                    setLang(key as "en" | "zh")
                     langDropdown.setOpen(false)
                   }}
-                  className={lang === key ? "font-medium text-primary" : ""}
+                  className={language === key ? "font-medium text-primary" : ""}
                 >
                   {label}
                 </DropdownMenuItem>
@@ -203,12 +211,12 @@ export function AppHeader({ account, onSignOut }: AppHeaderProps) {
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onClick={() => navigate("/account")}>
                   <SettingsIcon />
-                  My Account
+                  {t("account:My Account")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onSignOut} variant="destructive">
                   <LogOutIcon />
-                  Sign Out
+                  {t("account:Sign Out")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -218,7 +226,7 @@ export function AppHeader({ account, onSignOut }: AppHeaderProps) {
             to="/signin"
             className="rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
           >
-            Sign In
+            {t("account:Sign In")}
           </Link>
         ) : null}
       </div>

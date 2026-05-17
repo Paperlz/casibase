@@ -1,5 +1,6 @@
 import * as React from "react"
 import { NavLink, useLocation } from "react-router"
+import { useTranslation } from "react-i18next"
 import { type Account, isAdminUser, isChatAdminUser } from "~/backend/AccountBackend"
 import {
   BarChart2Icon,
@@ -166,17 +167,19 @@ function getActiveGroupKey(pathname: string): string | null {
 
 function NavGroupItem({ group, defaultOpen }: { group: NavGroup; defaultOpen: boolean }) {
   const location = useLocation()
+  const { t } = useTranslation("general")
   const Icon = group.icon
+  const title = t(group.title)
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/collapsible">
       <SidebarMenuItem>
         <SidebarMenuButton
           render={<CollapsibleTrigger className="w-full" />}
-          tooltip={group.title}
+          tooltip={title}
         >
           <Icon className="shrink-0" />
-          <span>{group.title}</span>
+          <span>{title}</span>
           <ChevronRightIcon className="ml-auto shrink-0 transition-transform duration-200 group-data-open/collapsible:rotate-90" />
         </SidebarMenuButton>
         <CollapsibleContent>
@@ -189,7 +192,7 @@ function NavGroupItem({ group, defaultOpen }: { group: NavGroup; defaultOpen: bo
                     render={item.external ? <a href={item.url} target="_blank" rel="noreferrer" /> : <NavLink to={item.url} />}
                     isActive={isActive}
                   >
-                    <span>{item.title}</span>
+                    <span>{t(item.title)}</span>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
               )
@@ -206,6 +209,7 @@ export function AppSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar> & { account?: Account }) {
   const location = useLocation()
+  const { t } = useTranslation("general")
   const { theme } = useTheme()
   const { getLogoUrl } = useSite()
   const activeGroupKey = getActiveGroupKey(location.pathname)
@@ -244,11 +248,11 @@ export function AppSidebar({
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton
                     render={<NavLink to={item.url} />}
-                    tooltip={item.title}
+                    tooltip={t(item.title)}
                     isActive={isActive}
                   >
                     <Icon className="shrink-0" />
-                    <span>{item.title}</span>
+                    <span>{t(item.title)}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )
