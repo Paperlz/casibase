@@ -1,3 +1,5 @@
+import { getLanguage as getI18nLanguage } from "~/i18n"
+
 // Server URL — empty string means same-origin (production); localhost gets the backend port
 export const ServerUrl =
   typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -5,8 +7,7 @@ export const ServerUrl =
     : ""
 
 export function getLanguage(): string {
-  if (typeof localStorage === "undefined") return "en"
-  return localStorage.getItem("language") ?? "en"
+  return getI18nLanguage()
 }
 
 export function getAcceptLanguage(): string {

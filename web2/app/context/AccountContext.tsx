@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useNavigate } from "react-router"
 import { type Account, getAccount, signout } from "~/backend/AccountBackend"
+import { setLanguage } from "~/i18n"
 
 type AccountState = {
   /** undefined = still loading; null = not signed in; Account = signed in */
@@ -23,7 +24,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         setAccount(res.data ?? null)
         // Sync language preference from account
         if (res.data?.language) {
-          localStorage.setItem("language", res.data.language)
+          setLanguage(res.data.language)
         }
       } else {
         setAccount(null)
