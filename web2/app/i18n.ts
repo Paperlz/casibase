@@ -17,7 +17,12 @@ function toSupportedLanguage(language: string | null | undefined): SupportedLang
 }
 
 function getInitialLanguage(): SupportedLanguage {
-  return "en"
+  if (typeof window === "undefined") return "en"
+
+  const storedLanguage = toSupportedLanguage(window.localStorage.getItem(LANGUAGE_KEY))
+  if (storedLanguage) return storedLanguage
+
+  return toSupportedLanguage(window.navigator.language) ?? "en"
 }
 
 export function getLanguage(): SupportedLanguage {
