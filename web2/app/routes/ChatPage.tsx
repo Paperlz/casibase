@@ -290,20 +290,27 @@ export default function ChatPage() {
       setLoading(false)
       setMessages([])
 
-      if (fetchedChats.length > 0) {
-        let targetChat = chatNameParam
-          ? fetchedChats.find((c) => c.name === chatNameParam)
-          : undefined
-        if (!targetChat) targetChat = fetchedChats[0]
-
-        if (!chatNameParam || !fetchedChats.find((c) => c.name === chatNameParam)) {
-          navigate(generateChatUrl(targetChat.name, targetChat.store), { replace: true })
-        }
-        setChat(targetChat)
-        setDraftStoreName(targetChat.store)
-        loadMessages(targetChat)
+      if (!chatNameParam) {
+        setChat(undefined)
+        setDraftStoreName(storeNameParam)
+        menuRef.current?.clearSelectedKey()
+        fetchStores()
+        return
       }
 
+      const targetChat = fetchedChats.find((c) => c.name === chatNameParam)
+      if (!targetChat) {
+        setChat(undefined)
+        setDraftStoreName(storeNameParam)
+        menuRef.current?.clearSelectedKey()
+        navigate(generateChatUrl(undefined, storeNameParam), { replace: true })
+        fetchStores()
+        return
+      }
+
+      setChat(targetChat)
+      setDraftStoreName(targetChat.store)
+      loadMessages(targetChat)
       fetchStores()
     })
   }, [account?.name, chatNameParam, storeNameParam])
@@ -478,7 +485,7 @@ export default function ChatPage() {
 
   function handleAddChat(store?: Store) {
     inputStore.current.set(chat?.name, inputValue)
-    const sName = store?.name || storeNameParam || defaultStore?.name || ""
+    const sName = store?.name || storeNameParam || ""
     setChat(undefined)
     setMessages([])
     setMessageError(false)

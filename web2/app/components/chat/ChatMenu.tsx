@@ -79,13 +79,8 @@ const ChatMenu = forwardRef<ChatMenuHandle, Props>(function ChatMenu(
   }
 
   function handleAddChat() {
-    if (currentStoreName && stores) {
-      const store = stores.find((s) => s.name === currentStoreName)
-      onAddChat(store)
-    } else {
-      const defaultStore = stores?.find((s) => s.isDefault)
-      onAddChat(defaultStore)
-    }
+    const store = currentStoreName ? stores?.find((s) => s.name === currentStoreName) : undefined
+    onAddChat(store)
   }
 
   return (
