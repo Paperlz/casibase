@@ -69,6 +69,24 @@ function getStoredTheme() {
   return localStorage.getItem("themeAlgorithm") ?? "default"
 }
 
+function isColorDark(hex: string): boolean {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5
+}
+
+function applyThemeColor(color: string | undefined | null) {
+  if (!color || typeof document === "undefined") return
+  const root = document.documentElement
+  root.style.setProperty("--primary", color)
+  root.style.setProperty("--sidebar-primary", color)
+  root.style.setProperty("--ring", color)
+  const fg = isColorDark(color) ? "oklch(0.985 0 0)" : "oklch(0.145 0 0)"
+  root.style.setProperty("--primary-foreground", fg)
+  root.style.setProperty("--sidebar-primary-foreground", fg)
+}
+
 function setFavicon(href: string) {
   let link = document.querySelector<HTMLLinkElement>("link[rel='icon']")
   if (!link) {
@@ -116,6 +134,10 @@ export function SiteProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("openagent:site-updated", onRefresh)
     return () => window.removeEventListener("openagent:site-updated", onRefresh)
   }, [refreshSite])
+
+  React.useEffect(() => {
+    applyThemeColor(site?.themeColor)
+  }, [site?.themeColor])
 
   const value = React.useMemo<SiteContextValue>(() => ({
     site,
