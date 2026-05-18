@@ -58,5 +58,9 @@ export default [
     // Messages admin
     route("messages", "routes/MessageListPage.tsx"),
     route("messages/:messageName", "routes/MessageEditPage.tsx"),
+
+    // Vectors
+    route("vectors", "routes/VectorListPage.tsx"),
+    route("vectors/:vectorName", "routes/VectorEditPage.tsx"),
   ]),
 ] satisfies RouteConfig
