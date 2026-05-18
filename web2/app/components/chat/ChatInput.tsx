@@ -133,7 +133,7 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
   }
 
   return (
-    <div className="border-t p-3">
+    <div className="bg-background px-4 py-3">
       <div className="mx-auto max-w-3xl">
         {/* File previews */}
         {files.length > 0 && (
@@ -145,69 +145,70 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
         {/* Web search badge */}
         {webSearchEnabled && (
           <div className="mb-2">
-            <div className="bg-primary/10 text-primary border-primary/20 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium">
+            <span className="bg-primary/10 text-primary border-primary/20 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium">
               <GlobeIcon className="h-3 w-3" />
               {t("chat:Web search")}
               <button
-                className="ml-1 opacity-60 hover:opacity-100"
+                className="ml-0.5 rounded-full opacity-60 hover:opacity-100"
                 onClick={() => onWebSearchChange(false)}
               >
                 <XIcon className="h-3 w-3" />
               </button>
-            </div>
+            </span>
           </div>
         )}
 
         {/* Input shell */}
-        <div className="bg-background focus-within:ring-ring flex flex-col rounded-xl border shadow-sm transition-shadow focus-within:ring-1">
-          <div className="flex items-end gap-1 px-2 py-1">
-            <ChatInputMenu
-              disabled={!!(disableInput || messageError)}
-              webSearchEnabled={webSearchEnabled}
-              onWebSearchChange={onWebSearchChange}
-              onFileUpload={handleFileUploadClick}
-              disableFileUpload={store?.disableFileUpload}
-              store={store}
-              chat={chat}
-            />
+        <div className="bg-background flex items-end gap-2 rounded-2xl border px-3 py-2 shadow-sm transition-colors focus-within:border-ring/60 focus-within:shadow-md">
+          {/* Left: attachment menu */}
+          <ChatInputMenu
+            disabled={!!(disableInput || messageError)}
+            webSearchEnabled={webSearchEnabled}
+            onWebSearchChange={onWebSearchChange}
+            onFileUpload={handleFileUploadClick}
+            disableFileUpload={store?.disableFileUpload}
+            store={store}
+            chat={chat}
+          />
 
-            <Textarea
-              ref={textareaRef}
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={messageError ? "" : t("chat:Type message here")}
-              disabled={disableInput}
-              className="min-h-[40px] max-h-[200px] resize-none border-0 bg-transparent p-2 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              rows={1}
-            />
+          {/* Textarea */}
+          <Textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={messageError ? "" : t("chat:Type message here")}
+            disabled={disableInput}
+            className="min-h-[32px] max-h-[200px] flex-1 resize-none border-0 bg-transparent p-0 text-sm leading-[32px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            rows={1}
+          />
 
-            {/* Voice input */}
+          {/* Right: voice + send/stop */}
+          <div className="flex shrink-0 items-center gap-1">
             {(onVoiceInputStart || onVoiceInputEnd) && (
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 shrink-0 ${isVoiceInput ? "text-destructive" : "text-muted-foreground"}`}
+                className={`h-8 w-8 rounded-lg ${isVoiceInput ? "text-destructive hover:text-destructive" : "text-muted-foreground"}`}
                 onClick={isVoiceInput ? onVoiceInputEnd : onVoiceInputStart}
               >
                 {isVoiceInput ? <MicOffIcon className="h-4 w-4" /> : <MicIcon className="h-4 w-4" />}
               </Button>
             )}
 
-            {/* Send / Cancel button */}
             {loading ? (
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="icon"
-                className="h-8 w-8 shrink-0"
+                className="h-8 w-8 rounded-lg"
                 onClick={onCancelMessage}
               >
-                <SquareIcon className="h-4 w-4 fill-current" />
+                <SquareIcon className="h-3.5 w-3.5 fill-current" />
               </Button>
             ) : (
               <Button
                 size="icon"
-                className="h-8 w-8 shrink-0 rounded-lg"
+                className="h-8 w-8 rounded-lg"
                 disabled={!canSend}
                 onClick={() => { if (canSend) onSend(value, webSearchEnabled) }}
               >
