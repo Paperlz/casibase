@@ -47,6 +47,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
+  useSidebar,
 } from "~/components/ui/sidebar"
 import { useTheme } from "~/hooks/useTheme"
 import { useSite } from "~/context/SiteContext"
@@ -166,6 +167,8 @@ function getActiveGroupKey(pathname: string): string | null {
   return null
 }
 
+const SIDEBAR_GROUP_STORAGE_PREFIX = "sidebar-group-"
+
 function NavGroupItem({
   group,
   defaultOpen,
@@ -182,6 +185,22 @@ function NavGroupItem({
   const Icon = group.icon
   const title = t(group.title)
 
+  const [open, setOpen] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem(`${SIDEBAR_GROUP_STORAGE_PREFIX}${group.key}`)
+      return saved !== null ? saved === "true" : defaultOpen
+    } catch {
+      return defaultOpen
+    }
+  })
+
+  const handleOpenChange = React.useCallback((newOpen: boolean) => {
+    setOpen(newOpen)
+    try {
+      localStorage.setItem(`${SIDEBAR_GROUP_STORAGE_PREFIX}${group.key}`, String(newOpen))
+    } catch {}
+  }, [group.key])
+
   function renderSubButton(item: NavItem) {
     if (item.casdoorPath) {
       return <a href={`${casdoorIssuer}${item.casdoorPath}`} target="_blank" rel="noreferrer" />
@@ -193,7 +212,7 @@ function NavGroupItem({
   }
 
   return (
-    <Collapsible defaultOpen={defaultOpen} className="group/collapsible">
+    <Collapsible open={open} onOpenChange={handleOpenChange} className="group/collapsible">
       <SidebarMenuItem>
         <SidebarMenuButton
           render={<CollapsibleTrigger className="w-full" />}
@@ -247,9 +266,11 @@ export function AppSidebar({
   const location = useLocation()
   const { t } = useTranslation("general")
   const { theme } = useTheme()
-  const { getLogoUrl } = useSite()
+  const { getLogoUrl, getFaviconUrl } = useSite()
+  const { state } = useSidebar()
   const activeGroupKey = getActiveGroupKey(location.pathname)
   const logoUrl = getLogoUrl(theme)
+  const faviconUrl = getFaviconUrl(theme)
 
   const casdoorAvailable = isCasdoorAvailable()
   const casdoorIssuer = getAuthConfig().issuer
@@ -269,7 +290,7 @@ export function AppSidebar({
       <SidebarHeader className="h-[52px] justify-center border-b border-sidebar-border px-4 py-0">
         <NavLink to="/" className="flex items-center gap-2 overflow-hidden">
           <img
-            src={logoUrl}
+            src={state === "collapsed" ? faviconUrl : logoUrl}
             alt="logo"
             className="h-[38px] max-w-40 object-contain transition-[height,width,max-width] group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7 group-data-[collapsible=icon]:rounded-md"
           />
