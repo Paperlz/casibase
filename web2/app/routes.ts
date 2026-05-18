@@ -73,5 +73,9 @@ export default [
     // Vectors
     route("vectors", "routes/VectorListPage.tsx"),
     route("vectors/:vectorName", "routes/VectorEditPage.tsx"),
+
+    // Records
+    route("records", "routes/RecordListPage.tsx"),
+    route("records/:organizationName/:recordName", "routes/RecordEditPage.tsx"),
   ]),
 ] satisfies RouteConfig
