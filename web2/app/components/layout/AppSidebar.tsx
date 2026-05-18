@@ -1,10 +1,10 @@
 import * as React from "react"
 import { NavLink, useLocation } from "react-router"
 import { useTranslation } from "react-i18next"
-import { toast } from "sonner"
 import { type Account, isAdminUser, isChatAdminUser } from "~/backend/AccountBackend"
 import { isCasdoorAvailable, getAuthConfig } from "~/lib/AuthConfig"
 import { ServerUrl } from "~/lib/api"
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip"
 import {
   BarChart2Icon,
   BrainCircuitIcon,
@@ -141,11 +141,11 @@ const navGroups: NavGroup[] = [
   },
   {
     title: "Admin",
-    url: "/sites/site-built-in",
+    url: "/sites/admin/site-built-in",
     icon: SettingsIcon,
     key: "admin",
     items: [
-      { title: "Sites", url: "/sites", icon: LayoutIcon },
+      { title: "Sites", url: "/sites/admin/site-built-in", icon: LayoutIcon },
       { title: "Resources", url: "/resources", icon: InboxIcon },
       { title: "Usages", url: "/usages", icon: LineChartIcon },
       { title: "Visitors", url: "/visitors", icon: BarChart2Icon },
@@ -184,15 +184,7 @@ function NavGroupItem({
 
   function renderSubButton(item: NavItem) {
     if (item.casdoorPath) {
-      if (casdoorAvailable) {
-        return <a href={`${casdoorIssuer}${item.casdoorPath}`} target="_blank" rel="noreferrer" />
-      }
-      return (
-        <button
-          type="button"
-          onClick={() => toast.warning(t("Identity requires Casdoor - Tooltip"))}
-        />
-      )
+      return <a href={`${casdoorIssuer}${item.casdoorPath}`} target="_blank" rel="noreferrer" />
     }
     if (item.external) {
       return <a href={item.url} target="_blank" rel="noreferrer" />
@@ -214,15 +206,30 @@ function NavGroupItem({
         <CollapsibleContent>
           <SidebarMenuSub>
             {group.items.map((item) => {
+              const isCasdoorBlocked = !!item.casdoorPath && !casdoorAvailable
               const isActive = !item.casdoorPath && location.pathname.startsWith(item.url) && item.url !== "/"
               return (
                 <SidebarMenuSubItem key={item.title}>
-                  <SidebarMenuSubButton
-                    render={renderSubButton(item)}
-                    isActive={isActive}
-                  >
-                    <span>{t(item.title)}</span>
-                  </SidebarMenuSubButton>
+                  {isCasdoorBlocked ? (
+                    <Tooltip>
+                      {/* div wrapper captures hover even though the inner button has pointer-events-none via aria-disabled */}
+                      <TooltipTrigger render={<div />}>
+                        <SidebarMenuSubButton render={<span />} aria-disabled>
+                          <span>{t(item.title)}</span>
+                        </SidebarMenuSubButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        {t("Requires Casdoor to be installed")}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <SidebarMenuSubButton
+                      render={renderSubButton(item)}
+                      isActive={isActive}
+                    >
+                      <span>{t(item.title)}</span>
+                    </SidebarMenuSubButton>
+                  )}
                 </SidebarMenuSubItem>
               )
             })}
