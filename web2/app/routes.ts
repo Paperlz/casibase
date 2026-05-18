@@ -85,5 +85,8 @@ export default [
     // Scales
     route("scales", "routes/ScaleListPage.tsx"),
     route("scales/:owner/:scaleName", "routes/ScaleEditPage.tsx"),
+
+    // Resources
+    route("resources", "routes/ResourceListPage.tsx"),
   ]),
 ] satisfies RouteConfig
