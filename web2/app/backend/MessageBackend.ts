@@ -54,6 +54,32 @@ export type Message = {
   errorText?: string
   hintText?: string
   isReasoningPhase?: boolean
+  tokenCount?: number
+  textTokenCount?: number
+  price?: number
+  currency?: string
+  comment?: string
+  needNotify?: boolean
+}
+
+export function getGlobalMessages(
+  page: number | string = "",
+  pageSize: number | string = "",
+  field = "",
+  value = "",
+  sortField = "",
+  sortOrder = "",
+  store = ""
+): Promise<any> {
+  return apiFetch(
+    `/api/get-global-messages?p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}&store=${encodeURIComponent(store)}`
+  )
+}
+
+export function getMessages(user: string, selectedUser = ""): Promise<any> {
+  return apiFetch(
+    `/api/get-messages?user=${encodeURIComponent(user)}&selectedUser=${encodeURIComponent(selectedUser)}`
+  )
 }
 
 export function getChatMessages(owner: string, chat: string): Promise<any> {

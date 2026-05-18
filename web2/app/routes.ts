@@ -54,5 +54,9 @@ export default [
     // Chats admin
     route("chats", "routes/ChatListPage.tsx"),
     route("chats/:chatName", "routes/ChatEditPage.tsx"),
+
+    // Messages admin
+    route("messages", "routes/MessageListPage.tsx"),
+    route("messages/:messageName", "routes/MessageEditPage.tsx"),
   ]),
 ] satisfies RouteConfig
