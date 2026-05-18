@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router"
 import { AlertCircle, HelpCircle, Info, Loader2 } from "lucide-react"
 import i18next from "i18next"
@@ -29,8 +29,12 @@ export default function AuthCallback() {
   const [message, setMessage] = useState<string | null>(null)
   const [errorDetails, setErrorDetails] = useState<ErrorDetails | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const hasRun = useRef(false)
 
   useEffect(() => {
+    if (hasRun.current) return
+    hasRun.current = true
+
     const code = params.get("code")
     const state = params.get("state")
 
