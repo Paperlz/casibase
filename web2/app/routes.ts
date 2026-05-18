@@ -63,6 +63,9 @@ export default [
     route("messages", "routes/MessageListPage.tsx"),
     route("messages/:messageName", "routes/MessageEditPage.tsx"),
 
+    // Sessions
+    route("sessions", "routes/SessionListPage.tsx"),
+
     // Files
     route("files", "routes/FileListPage.tsx"),
     route("files/:fileName", "routes/FileViewPage.tsx"),
