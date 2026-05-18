@@ -39,6 +39,9 @@ export default [
     // Usages
     route("usages", "routes/UsagePage.tsx"),
 
+    // Visitors
+    route("visitors", "routes/VisitorPage.tsx"),
+
     // System Info
     route("sysinfo", "routes/SystemInfoPage.tsx"),
 
