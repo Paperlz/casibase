@@ -81,5 +81,9 @@ export default [
     // Tasks
     route("tasks", "routes/TaskListPage.tsx"),
     route("tasks/:owner/:taskName", "routes/TaskEditPage.tsx"),
+
+    // Scales
+    route("scales", "routes/ScaleListPage.tsx"),
+    route("scales/:owner/:scaleName", "routes/ScaleEditPage.tsx"),
   ]),
 ] satisfies RouteConfig
