@@ -2,8 +2,9 @@ import * as React from "react"
 import { Link, useLocation, useNavigate } from "react-router"
 import { useTranslation } from "react-i18next"
 import { GlobeIcon, LogOutIcon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react"
-import { type Account } from "~/backend/AccountBackend"
+import { isBasicLoginMode, type Account } from "~/backend/AccountBackend"
 import { getLanguage, setLanguage } from "~/i18n"
+import { isCasdoorAvailable, getMyProfileUrl } from "~/lib/AuthConfig"
 
 import {
   Breadcrumb,
@@ -209,7 +210,15 @@ export function AppHeader({ account, onSignOut }: AppHeaderProps) {
                 </span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => navigate("/account")}>
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (isCasdoorAvailable() && !isBasicLoginMode(account)) {
+                      window.open(getMyProfileUrl(), "_blank")
+                    } else {
+                      navigate("/account")
+                    }
+                  }}
+                >
                   <SettingsIcon />
                   {t("account:My Account")}
                 </DropdownMenuItem>

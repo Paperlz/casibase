@@ -121,3 +121,15 @@ export function getSignupUrl(): string {
   sessionStorage.setItem("signinUrl", getSigninUrl())
   return appendLanguage(`${config.issuer.trim()}/signup/${config.appName}`)
 }
+
+export function getMyProfileUrl(): string {
+  const config = getAuthConfig()
+  if (!config.issuer) {
+    return ""
+  }
+
+  const returnUrl = window.location.href
+  return appendLanguage(
+    `${config.issuer.trim()}/account?returnUrl=${encodeURIComponent(returnUrl)}`
+  )
+}
