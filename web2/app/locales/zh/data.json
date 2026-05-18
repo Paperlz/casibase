@@ -21,6 +21,7 @@
     "Please Modify Your Password": "请修改您的密码",
     "Re-enter New": "重新输入新密码",
     "Set Password": "设置密码",
+    "Don't have an account?": "没有账号？",
     "Sign In": "登录",
     "Sign Out": "登出",
     "Sign Up": "注册",
@@ -398,7 +399,9 @@
     "Preparing the workspace entry screen.": "正在准备工作区入口界面。",
     "Self-hosted. 30+ model providers. Full MCP support. Your personal AI assistant.": "私有部署。30+ 模型提供商。完整 MCP 支持。你的个人 AI 助手。",
     "Signing in...": "正在登录...",
-    "Welcome back": "欢迎回来"
+    "Welcome back": "欢迎回来",
+    "Enter your credentials to sign in.": "输入凭据以登录。",
+    "Self-hosted. 30+ model providers. Full MCP support.": "私有部署。30+ 模型提供商。完整 MCP 支持。"
   },
   "message": {
     "Author": "作者",

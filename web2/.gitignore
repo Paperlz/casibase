@@ -6,3 +6,6 @@
 /.react-router/
 /build/
 /.vite/
+
+# Dev server logs
+dev-server*.log

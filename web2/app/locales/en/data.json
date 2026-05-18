@@ -21,6 +21,7 @@
     "Please Modify Your Password": "Please Modify Your Password",
     "Re-enter New": "Re-enter New",
     "Set Password": "Set Password",
+    "Don't have an account?": "Don't have an account?",
     "Sign In": "Sign In",
     "Sign Out": "Sign Out",
     "Sign Up": "Sign Up",
@@ -398,7 +399,9 @@
     "Preparing the workspace entry screen.": "Preparing the workspace entry screen.",
     "Self-hosted. 30+ model providers. Full MCP support. Your personal AI assistant.": "Self-hosted. 30+ model providers. Full MCP support. Your personal AI assistant.",
     "Signing in...": "Signing in...",
-    "Welcome back": "Welcome back"
+    "Welcome back": "Welcome back",
+    "Enter your credentials to sign in.": "Enter your credentials to sign in.",
+    "Self-hosted. 30+ model providers. Full MCP support.": "Self-hosted. 30+ model providers. Full MCP support."
   },
   "message": {
     "Author": "Author",
