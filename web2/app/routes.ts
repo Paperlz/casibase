@@ -47,5 +47,9 @@ export default [
     route("chat/:chatName", "routes/ChatPage.tsx", { id: "chat-by-name" }),
     route(":owner/:storeName/chat", "routes/ChatPage.tsx", { id: "store-chat" }),
     route(":owner/:storeName/chat/:chatName", "routes/ChatPage.tsx", { id: "store-chat-by-name" }),
+
+    // Chats admin
+    route("chats", "routes/ChatListPage.tsx"),
+    route("chats/:chatName", "routes/ChatEditPage.tsx"),
   ]),
 ] satisfies RouteConfig

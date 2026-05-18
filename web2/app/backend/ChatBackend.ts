@@ -5,14 +5,37 @@ export type Chat = {
   name: string
   displayName: string
   createdTime: string
+  updatedTime?: string
   organization?: string
   store: string
   user: string
   modelProvider?: string
   needTitle: boolean
   messageCount?: number
+  tokenCount?: number
+  price?: number
+  currency?: string
   category?: string
   isHidden?: boolean
+  isDeleted?: boolean
+  clientIp?: string
+  clientIpDesc?: string
+  userAgent?: string
+  userAgentDesc?: string
+}
+
+export function getGlobalChats(
+  page: number | string = "",
+  pageSize: number | string = "",
+  field = "",
+  value = "",
+  sortField = "",
+  sortOrder = "",
+  store = ""
+): Promise<any> {
+  return apiFetch(
+    `/api/get-global-chats?p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}&store=${encodeURIComponent(store)}`
+  )
 }
 
 export function getChats(
