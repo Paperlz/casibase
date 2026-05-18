@@ -564,13 +564,13 @@ export default function ChatPage() {
 
   if (loading) {
     return (
-      <div className="flex h-full gap-3 p-4">
+      <div className="flex h-[calc(100svh-104px)] min-h-0 gap-3 overflow-hidden p-4">
         <div className="w-60 shrink-0 space-y-2">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-8 w-full" />
           ))}
         </div>
-        <div className="flex-1 space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-hidden">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className={`h-16 ${i % 2 ? "ml-auto w-2/3" : "w-3/4"}`} />
           ))}
@@ -580,11 +580,11 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-[calc(100svh-104px)] min-h-0 overflow-hidden">
       {/* Desktop sidebar */}
       {!mobile && !chatMenuCollapsed && (
         <div
-          className="flex w-60 shrink-0 flex-col border-r"
+          className="flex min-h-0 w-60 shrink-0 flex-col border-r"
           style={{ background: isDark ? "#1a1a1a" : "#f7f8fa" }}
         >
           {sidebarContent}
@@ -594,14 +594,14 @@ export default function ChatPage() {
       {/* Mobile sidebar as Sheet */}
       {mobile && (
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-          <SheetContent side="left" className="w-64 p-0">
+          <SheetContent side="left" className="h-svh w-64 p-0">
             {sidebarContent}
           </SheetContent>
         </Sheet>
       )}
 
       {/* Main chat area */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Header */}
         <div
           className="flex shrink-0 items-center gap-1 border-b px-2 py-1"
@@ -634,7 +634,7 @@ export default function ChatPage() {
         </div>
 
         {/* Messages */}
-        <div className="relative flex-1 overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
           {/* Background logo watermark */}
           {messages.length > 0 && (
             <div
@@ -646,9 +646,9 @@ export default function ChatPage() {
             />
           )}
 
-          <div className="flex h-full flex-col">
+          <div className="flex h-full min-h-0 flex-col">
             {messages.length === 0 ? (
-              <div className="flex-1 overflow-y-auto">
+              <div className="min-h-0 flex-1 overflow-y-auto">
                 <WelcomeHeader store={currentStore} />
               </div>
             ) : (
