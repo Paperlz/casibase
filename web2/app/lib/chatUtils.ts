@@ -18,11 +18,7 @@ export function getDefaultAiAvatar(): string {
 export function getUserAvatar(message: Message, account: Account | null | undefined): string {
   if (message.author === "AI") return getDefaultAiAvatar()
   if (account?.avatar) {
-    const lastSlash = account.avatar.lastIndexOf("/")
-    if (lastSlash !== -1) {
-      const base = account.avatar.substring(0, lastSlash + 1)
-      return `${base}${message.author}`
-    }
+    return account.avatar
   }
   return getDefaultAiAvatar()
 }
