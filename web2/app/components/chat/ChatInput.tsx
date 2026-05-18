@@ -5,7 +5,6 @@ import { Button } from "~/components/ui/button"
 import { Textarea } from "~/components/ui/textarea"
 import ChatFileInput from "~/components/chat/ChatFileInput"
 import ChatInputMenu from "~/components/chat/ChatInputMenu"
-import { getIsDark, getThemeColor } from "~/lib/chatUtils"
 import type { Store } from "~/backend/StoreBackend"
 import type { Chat } from "~/backend/ChatBackend"
 
@@ -62,8 +61,6 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
 ) {
   const { t } = useTranslation()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const isDark = getIsDark()
-  const themeColor = getThemeColor()
 
   useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
@@ -135,9 +132,6 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
     }
   }
 
-  const borderColor = isDark ? "#333" : "#e8eaed"
-  const bgColor = isDark ? "#1a1a1a" : "#fff"
-
   return (
     <div className="border-t p-3">
       <div className="mx-auto max-w-3xl">
@@ -151,10 +145,7 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
         {/* Web search badge */}
         {webSearchEnabled && (
           <div className="mb-2">
-            <div
-              className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium"
-              style={{ color: themeColor, borderColor: themeColor + "33", background: isDark ? "#2a2a2a" : "#eef2ff" }}
-            >
+            <div className="bg-primary/10 text-primary border-primary/20 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium">
               <GlobeIcon className="h-3 w-3" />
               {t("chat:Web search")}
               <button
@@ -168,10 +159,7 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
         )}
 
         {/* Input shell */}
-        <div
-          className="flex flex-col rounded-2xl border shadow-sm focus-within:shadow-md transition-shadow"
-          style={{ borderColor, background: bgColor }}
-        >
+        <div className="bg-background focus-within:ring-ring flex flex-col rounded-xl border shadow-sm transition-shadow focus-within:ring-1">
           <div className="flex items-end gap-1 px-2 py-1">
             <ChatInputMenu
               disabled={!!(disableInput || messageError)}
@@ -219,10 +207,9 @@ const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
             ) : (
               <Button
                 size="icon"
-                className="h-8 w-8 shrink-0 rounded-xl"
+                className="h-8 w-8 shrink-0 rounded-lg"
                 disabled={!canSend}
                 onClick={() => { if (canSend) onSend(value, webSearchEnabled) }}
-                style={canSend ? { backgroundColor: themeColor } : {}}
               >
                 <SendHorizontalIcon className="h-4 w-4" />
               </Button>

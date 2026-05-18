@@ -11,38 +11,25 @@ function renderJsonContent(raw: string) {
     /* not JSON */
   }
   return (
-    <pre className="overflow-auto rounded bg-muted p-2 text-xs font-mono leading-relaxed max-h-60">
+    <pre className="max-h-60 overflow-auto rounded bg-muted p-2 font-mono text-xs leading-relaxed">
       {text}
     </pre>
   )
 }
 
-function ToolCallCard({
-  toolCall,
-  isLast,
-  themeColor,
-}: {
-  toolCall: ToolCall
-  isLast: boolean
-  themeColor: string
-}) {
+function ToolCallCard({ toolCall, isLast }: { toolCall: ToolCall; isLast: boolean }) {
   const { t } = useTranslation()
   const isExecuting = !toolCall.content
   const [expanded, setExpanded] = useState(isExecuting)
 
   return (
-    <div
-      className={`overflow-hidden rounded-lg border bg-muted/30 ${isLast ? "" : "mb-2"}`}
-    >
+    <div className={`overflow-hidden rounded-lg border bg-muted/30 ${isLast ? "" : "mb-2"}`}>
       <div
         className="flex cursor-pointer select-none items-center gap-2 px-3 py-2"
         onClick={() => setExpanded((v) => !v)}
       >
-        <div
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded"
-          style={{ background: themeColor + "1a" }}
-        >
-          <CodeIcon className="h-3.5 w-3.5" style={{ color: themeColor }} />
+        <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center rounded">
+          <CodeIcon className="text-primary h-3.5 w-3.5" />
         </div>
 
         <span className="flex-1 truncate font-mono text-sm font-semibold">
@@ -51,7 +38,7 @@ function ToolCallCard({
 
         {isExecuting ? (
           <div className="flex items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-            <Loader2Icon className="h-3 w-3 animate-spin" style={{ color: themeColor }} />
+            <Loader2Icon className="text-primary h-3 w-3 animate-spin" />
             {t("chat:Executing...")}
           </div>
         ) : (
@@ -68,7 +55,7 @@ function ToolCallCard({
       </div>
 
       {expanded && (
-        <div className="border-t px-3 py-2 space-y-2">
+        <div className="space-y-2 border-t px-3 py-2">
           {toolCall.arguments && (
             <div>
               <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -85,8 +72,8 @@ function ToolCallCard({
               {renderJsonContent(toolCall.content)}
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2Icon className="h-3 w-3 animate-spin" style={{ color: themeColor }} />
+            <div className="text-primary flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2Icon className="text-primary h-3 w-3 animate-spin" />
               {t("chat:Executing...")}
             </div>
           )}
@@ -98,10 +85,9 @@ function ToolCallCard({
 
 type Props = {
   toolCalls: ToolCall[] | undefined
-  themeColor: string
 }
 
-export default function ToolCallSection({ toolCalls, themeColor }: Props) {
+export default function ToolCallSection({ toolCalls }: Props) {
   const { t } = useTranslation()
   if (!toolCalls || toolCalls.length === 0) return null
 
@@ -112,12 +98,7 @@ export default function ToolCallSection({ toolCalls, themeColor }: Props) {
         {`${toolCalls.length} ${t("chat:Tool calls")}`}
       </div>
       {toolCalls.map((tc, idx) => (
-        <ToolCallCard
-          key={idx}
-          toolCall={tc}
-          isLast={idx === toolCalls.length - 1}
-          themeColor={themeColor}
-        />
+        <ToolCallCard key={idx} toolCall={tc} isLast={idx === toolCalls.length - 1} />
       ))}
     </div>
   )

@@ -13,7 +13,7 @@ import ToolCallSection from "~/components/chat/ToolCallSection"
 import SearchSourcesDrawer from "~/components/chat/SearchSourcesDrawer"
 import KnowledgeSourcesDrawer from "~/components/chat/KnowledgeSourcesDrawer"
 import { renderText } from "~/lib/ChatMessageRender"
-import { getDefaultAiAvatar, getUserAvatar, getRefinedErrorText, getThemeColor, getIsDark } from "~/lib/chatUtils"
+import { getDefaultAiAvatar, getUserAvatar, getRefinedErrorText } from "~/lib/chatUtils"
 import { MessageCarrier } from "~/components/chat/MessageCarrier"
 import type { Message } from "~/backend/MessageBackend"
 import type { Account } from "~/backend/AccountBackend"
@@ -66,8 +66,6 @@ export default function MessageItem({
   const [knowledgeDrawerVisible, setKnowledgeDrawerVisible] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
 
-  const themeColor = getThemeColor()
-  const isDark = getIsDark()
   const isUserMessage = message.author !== "AI"
 
   useEffect(() => {
@@ -106,19 +104,15 @@ export default function MessageItem({
     return merged
   }, [message.searchResults, message.toolCalls])
 
-  const aiBubbleBg = isDark ? "#2a2d35" : "#f4f6fa"
-  const aiBubbleBorder = isDark ? "1px solid #383d47" : "1px solid #eaedf3"
-
   const renderThinkingAnimation = () => (
     <div className="flex items-center gap-2 p-2">
-      <span className="font-semibold" style={{ color: themeColor }}>{t("chat:Thinking")}</span>
+      <span className="text-primary font-semibold">{t("chat:Thinking")}</span>
       <div className="flex gap-1">
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="h-1.5 w-1.5 rounded-full"
+            className="bg-primary h-1.5 w-1.5 rounded-full"
             style={{
-              backgroundColor: themeColor,
               animation: "thinkingDot 1.4s infinite ease-in-out both",
               animationDelay: `${i * 0.16}s`,
             }}
@@ -182,10 +176,7 @@ export default function MessageItem({
         <div>
           {!hideThinking && message.reasonText && (
             <Collapsible open={reasonExpanded} onOpenChange={setReasonExpanded} className="mb-3">
-              <CollapsibleTrigger
-                className="flex items-center gap-2 text-sm font-semibold"
-                style={{ color: themeColor, borderLeft: `3px solid ${themeColor}`, paddingLeft: 8 }}
-              >
+              <CollapsibleTrigger className="text-primary border-primary flex items-center gap-2 border-l-2 pl-2 text-sm font-semibold">
                 {t("chat:Reasoning process")}
                 <ChevronDownIcon
                   className="h-3.5 w-3.5 transition-transform"
@@ -199,7 +190,7 @@ export default function MessageItem({
               </CollapsibleContent>
             </Collapsible>
           )}
-          <ToolCallSection toolCalls={message.toolCalls} themeColor={themeColor} />
+          <ToolCallSection toolCalls={message.toolCalls} />
           <div>{message.html || renderText(message.text)}</div>
         </div>
       )
@@ -222,18 +213,12 @@ export default function MessageItem({
             <AvatarImage src={avatarSrc} onError={() => setAvatarSrc(getDefaultAiAvatar())} />
             <AvatarFallback>AI</AvatarFallback>
           </Avatar>
-          <div
-            className="rounded-lg rounded-tl-sm p-3 text-sm"
-            style={{ background: aiBubbleBg, border: aiBubbleBorder }}
-          >
+          <div className="bg-muted rounded-lg rounded-tl-sm p-3 text-sm">
             {hideThinking
               ? renderThinkingAnimation()
               : (
                 <Collapsible open={reasonExpanded} onOpenChange={setReasonExpanded}>
-                  <CollapsibleTrigger
-                    className="flex items-center gap-2 text-sm font-semibold"
-                    style={{ color: themeColor, borderLeft: `3px solid ${themeColor}`, paddingLeft: 8 }}
-                  >
+                  <CollapsibleTrigger className="text-primary border-primary flex items-center gap-2 border-l-2 pl-2 text-sm font-semibold">
                     {t("chat:Reasoning process")}
                     <ChevronDownIcon className="h-3.5 w-3.5 transition-transform" style={{ transform: reasonExpanded ? "rotate(180deg)" : "" }} />
                   </CollapsibleTrigger>
@@ -266,10 +251,7 @@ export default function MessageItem({
           >
             <CopyButton message={message} onCopy={onCopy} />
           </div>
-          <div
-            className="max-w-[75%] rounded-2xl rounded-br-sm px-4 py-3 text-sm text-white"
-            style={{ backgroundColor: themeColor }}
-          >
+          <div className="bg-primary text-primary-foreground max-w-[75%] rounded-2xl rounded-br-sm px-4 py-3 text-sm">
             {message.hintText && (
               <div className="mb-2 flex items-start gap-1.5 text-xs opacity-80">
                 <InfoIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -301,10 +283,7 @@ export default function MessageItem({
           <AvatarFallback>AI</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
-          <div
-            className="inline-block max-w-full rounded-lg rounded-tl-sm px-4 py-3 text-sm"
-            style={{ background: aiBubbleBg, border: aiBubbleBorder }}
-          >
+          <div className="bg-muted inline-block max-w-full rounded-lg rounded-tl-sm px-4 py-3 text-sm">
             {message.hintText && (
               <div className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
                 <InfoIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -350,8 +329,7 @@ export default function MessageItem({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 gap-1 px-2 text-xs"
-                    style={{ color: themeColor }}
+                    className="text-primary h-6 gap-1 px-2 text-xs"
                     onClick={() => setSearchDrawerVisible(true)}
                   >
                     <GlobeIcon className="h-3 w-3" />
@@ -362,8 +340,7 @@ export default function MessageItem({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 gap-1 px-2 text-xs"
-                    style={{ color: themeColor }}
+                    className="text-primary h-6 gap-1 px-2 text-xs"
                     onClick={() => setKnowledgeDrawerVisible(true)}
                   >
                     <FileTextIcon className="h-3 w-3" />

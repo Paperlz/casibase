@@ -17,7 +17,7 @@ import { getChats, deleteChat, updateChat } from "~/backend/ChatBackend"
 import { getChatMessages, addMessage, updateMessage, closeMessageEventSource } from "~/backend/MessageBackend"
 import { getGlobalStores } from "~/backend/StoreBackend"
 import { renderText } from "~/lib/ChatMessageRender"
-import { getRandomName, isMobile, getIsDark } from "~/lib/chatUtils"
+import { getRandomName, isMobile } from "~/lib/chatUtils"
 import type { Chat } from "~/backend/ChatBackend"
 import type { Message } from "~/backend/MessageBackend"
 import type { Store } from "~/backend/StoreBackend"
@@ -69,8 +69,6 @@ export default function ChatPage() {
   const inputRef = useRef<ChatInputHandle>(null)
   const messageListRef = useRef<HTMLDivElement>(null)
   const inputStore = useRef(new Map<string | undefined, string>())
-
-  const isDark = getIsDark()
 
   const streamAnswer = useMessageStream(setMessages, setMessageLoading, setMessageError)
   const { handleMessageLike, copyMessageText } = useChatMessageHandlers(setMessages)
@@ -444,10 +442,7 @@ export default function ChatPage() {
     <div className="flex h-[calc(100svh-104px)] min-h-0 overflow-hidden">
       {/* Desktop sidebar */}
       {!mobile && !chatMenuCollapsed && (
-        <div
-          className="flex min-h-0 w-60 shrink-0 flex-col border-r"
-          style={{ background: isDark ? "#1a1a1a" : "#f7f8fa" }}
-        >
+        <div className="bg-muted/40 flex min-h-0 w-60 shrink-0 flex-col border-r">
           {sidebarContent}
         </div>
       )}
@@ -464,13 +459,7 @@ export default function ChatPage() {
       {/* Main chat area */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Header */}
-        <div
-          className="flex shrink-0 items-center gap-1 border-b px-2 py-1"
-          style={{
-            background: isDark ? "rgba(20,20,20,0.9)" : "rgba(255,255,255,0.9)",
-            backdropFilter: "blur(8px)",
-          }}
-        >
+        <div className="supports-[backdrop-filter]:bg-background/80 flex shrink-0 items-center gap-1 border-b bg-background/95 px-2 py-1 backdrop-blur-sm">
           {mobile ? (
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMobileMenuOpen(true)}>
               <MenuIcon className="h-4 w-4" />
