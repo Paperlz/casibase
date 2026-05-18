@@ -16,9 +16,10 @@ import { CheckCircle2Icon, ExternalLinkIcon } from "lucide-react"
 import i18next from "i18next"
 import type { Provider } from "~/backend/ProviderBackend"
 import type { Pipe } from "~/backend/PipeBackend"
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card"
+import { Separator } from "~/components/ui/separator"
 
 interface SuccessViewProps {
   savedProvider: Provider
@@ -38,40 +39,47 @@ export default function SuccessView({
   onReset,
 }: SuccessViewProps) {
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30 rounded-2xl mb-6">
-        <CheckCircle2Icon className="h-5 w-5 text-green-600 dark:text-green-400" />
-        <AlertTitle className="text-base font-semibold text-green-800 dark:text-green-300">
-          {i18next.t("setup:Setup complete!")}
-        </AlertTitle>
-        <AlertDescription className="mt-2 text-green-700 dark:text-green-400">
-          <p className="mb-3">
+    <div className="w-full max-w-2xl mx-auto px-4 py-8 space-y-4">
+      <Card className="border-green-200 dark:border-green-900">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <CheckCircle2Icon className="h-6 w-6 text-green-600 dark:text-green-400 shrink-0" />
+            <CardTitle className="text-green-800 dark:text-green-300">
+              {i18next.t("setup:Setup complete!")}
+            </CardTitle>
+          </div>
+          <p className="text-sm text-muted-foreground">
             {i18next.t("setup:Your configuration has been saved. You can now start chatting or further customize your setup.")}
           </p>
+        </CardHeader>
+        <Separator />
+        <CardContent className="pt-4">
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={onGoToChat}>
+            <Button onClick={onGoToChat}>
               {i18next.t("general:Chat")}
             </Button>
-            <Button size="sm" variant="outline" onClick={onViewProvider}>
+            <Button variant="outline" onClick={onViewProvider}>
               <ExternalLinkIcon className="mr-1.5 h-3.5 w-3.5" />
               {i18next.t("setup:View AI Model")}
             </Button>
             {savedPipe && (
-              <Button size="sm" variant="outline" onClick={onViewPipe}>
+              <Button variant="outline" onClick={onViewPipe}>
                 <ExternalLinkIcon className="mr-1.5 h-3.5 w-3.5" />
                 {i18next.t("setup:View Pipe")}
               </Button>
             )}
-            <Button size="sm" variant="ghost" onClick={onReset}>
+            <Button variant="ghost" onClick={onReset}>
               {i18next.t("setup:Setup another")}
             </Button>
           </div>
-        </AlertDescription>
-      </Alert>
+        </CardContent>
+      </Card>
 
-      <div className="rounded-2xl border bg-card p-7">
-        <div className="text-[15px] font-semibold mb-3">{i18next.t("setup:Created Resources")}</div>
-        <div className="flex flex-col gap-2">
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="text-sm">{i18next.t("setup:Created Resources")}</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
               {i18next.t("setup:AI Model")}
@@ -94,8 +102,8 @@ export default function SuccessView({
               <span className="text-sm text-muted-foreground">({savedPipe.type})</span>
             </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

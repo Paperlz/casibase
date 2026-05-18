@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ExternalLinkIcon } from "lucide-react"
+import { ExternalLinkIcon, MinusCircleIcon } from "lucide-react"
 import i18next from "i18next"
 import {
   getPipePlatformMetadata,
@@ -20,6 +20,8 @@ import {
   getProviderLogoURL,
 } from "~/lib/ProviderSetting"
 import { Input } from "~/components/ui/input"
+import { Card, CardContent, CardDescription, CardHeader } from "~/components/ui/card"
+import { Separator } from "~/components/ui/separator"
 import { cn } from "~/lib/utils"
 import { FieldRow, SectionTitle, SelectableCard } from "./QuickSetupCommon"
 
@@ -44,80 +46,87 @@ export default function PipeSection({
   const meta = selectedPipeType ? getPipePlatformMetadata(selectedPipeType) : null
 
   return (
-    <div className="rounded-2xl border bg-card p-7 mb-6">
-      <SectionTitle
-        number={2}
-        title={i18next.t("setup:Connect a Messaging Platform")}
-        subtitle={i18next.t("setup:Optional")}
-      />
-      <p className="text-sm text-muted-foreground mb-4">
-        {i18next.t("setup:Connect a messaging app so users can chat with your AI through Telegram, Discord, or WhatsApp. You can skip this step and set it up later.")}
-      </p>
+    <Card>
+      <CardHeader className="border-b">
+        <SectionTitle
+          number={2}
+          title={i18next.t("setup:Connect a Messaging Platform")}
+          subtitle={i18next.t("setup:Optional")}
+        />
+        <CardDescription>
+          {i18next.t("setup:Connect a messaging app so users can chat with your AI through Telegram, Discord, or WhatsApp. You can skip this step and set it up later.")}
+        </CardDescription>
+      </CardHeader>
 
-      <div
-        className="grid gap-3 mb-6"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}
-      >
-        {pipeTypes.map((p: { id: string; name: string }) => (
-          <SelectableCard
-            key={p.id}
-            logo={getProviderLogoURL({ category: "Chat", type: p.id })}
-            label={p.name}
-            desc={getPipePlatformMetadata(p.id).desc}
-            selected={selectedPipeType === p.id}
-            onClick={() => onSelectPipe(p.id)}
-          />
-        ))}
-
-        {/* Skip card */}
+      <CardContent className="pt-4">
         <div
-          onClick={onSkipPipe}
-          className={cn(
-            "flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 p-3 text-center transition-all select-none",
-            pipeSkipped
-              ? "border-border bg-muted/60"
-              : "border-border bg-card hover:border-primary/40 hover:bg-accent/40"
-          )}
+          className="grid gap-2"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))" }}
         >
-          <div className="text-[28px] mb-2 opacity-40">✕</div>
-          <div className="text-[13px] font-semibold mb-0.5">{i18next.t("setup:Skip")}</div>
-          <div className="text-[11px] text-muted-foreground">{i18next.t("setup:Set up later")}</div>
-        </div>
-      </div>
-
-      {meta && !pipeSkipped && (
-        <div className="border-t pt-5 mt-1">
-          <div className="text-[15px] font-semibold mb-4">
-            {i18next.t("setup:Configure")} {selectedPipeType}
-          </div>
-
-          <FieldRow
-            label={meta.tokenLabel}
-            hint={
-              <span>
-                {i18next.t("setup:How to get a token?")}&nbsp;
-                <a
-                  href={meta.helpUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  {i18next.t("setup:View guide")}
-                  <ExternalLinkIcon className="h-3 w-3" />
-                </a>
-              </span>
-            }
-          >
-            <Input
-              type="password"
-              value={pipeToken}
-              onChange={(e) => setPipeToken(e.target.value)}
-              placeholder={meta.tokenPlaceholder}
-              className="h-10"
+          {pipeTypes.map((p: { id: string; name: string }) => (
+            <SelectableCard
+              key={p.id}
+              logo={getProviderLogoURL({ category: "Chat", type: p.id })}
+              label={p.name}
+              desc={getPipePlatformMetadata(p.id).desc}
+              selected={selectedPipeType === p.id}
+              onClick={() => onSelectPipe(p.id)}
             />
-          </FieldRow>
+          ))}
+
+          <Card
+            onClick={onSkipPipe}
+            className={cn(
+              "cursor-pointer select-none transition-all",
+              pipeSkipped
+                ? "ring-2 ring-muted-foreground/40 bg-muted/50"
+                : "hover:ring-muted-foreground/30 hover:bg-accent/40"
+            )}
+          >
+            <CardContent className="flex flex-col items-center text-center py-2 px-1.5">
+              <div className="flex h-8 w-8 items-center justify-center mb-1.5">
+                <MinusCircleIcon className="h-6 w-6 text-muted-foreground/50" />
+              </div>
+              <div className="text-[11px] font-semibold leading-tight mb-0.5">{i18next.t("setup:Skip")}</div>
+              <div className="text-[10px] text-muted-foreground leading-tight">{i18next.t("setup:Set up later")}</div>
+            </CardContent>
+          </Card>
         </div>
-      )}
-    </div>
+
+        {meta && !pipeSkipped && (
+          <>
+            <Separator className="my-5" />
+            <p className="text-sm font-medium mb-4 text-foreground">
+              {i18next.t("setup:Configure")} {selectedPipeType}
+            </p>
+
+            <FieldRow
+              label={meta.tokenLabel}
+              hint={
+                <span>
+                  {i18next.t("setup:How to get a token?")}&nbsp;
+                  <a
+                    href={meta.helpUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                  >
+                    {i18next.t("setup:View guide")}
+                    <ExternalLinkIcon className="h-3 w-3" />
+                  </a>
+                </span>
+              }
+            >
+              <Input
+                type="password"
+                value={pipeToken}
+                onChange={(e) => setPipeToken(e.target.value)}
+                placeholder={meta.tokenPlaceholder}
+              />
+            </FieldRow>
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }

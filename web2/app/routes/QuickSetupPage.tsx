@@ -206,10 +206,10 @@ export default function QuickSetupPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold mb-1">{i18next.t("general:Quick Setup")}</h1>
-        <p className="text-[15px] text-muted-foreground">
+    <div className="w-full max-w-2xl mx-auto px-4 py-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">{i18next.t("general:Quick Setup")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           {i18next.t("setup:Get your AI up and running in minutes — no technical knowledge required.")}
         </p>
       </div>
@@ -238,12 +238,12 @@ export default function QuickSetupPage() {
         setPipeToken={setPipeToken}
       />
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pb-4">
         <Button
-          size="lg"
+          size="default"
           disabled={!selectedModelType || saving}
           onClick={handleSave}
-          className="min-w-[160px] rounded-xl font-semibold"
+          className="min-w-[140px]"
         >
           {saving && <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />}
           {saving ? i18next.t("setup:Saving...") : i18next.t("setup:Save Configuration")}

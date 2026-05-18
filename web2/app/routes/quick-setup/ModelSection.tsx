@@ -28,6 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select"
+import { Card, CardContent, CardDescription, CardHeader } from "~/components/ui/card"
+import { Separator } from "~/components/ui/separator"
 import { FieldRow, SectionTitle, SelectableCard } from "./QuickSetupCommon"
 
 interface ModelSectionProps {
@@ -67,124 +69,131 @@ export default function ModelSection({
       : []
 
   return (
-    <div className="rounded-2xl border bg-card p-7 mb-6">
-      <SectionTitle number={1} title={i18next.t("setup:Choose an AI Model")} />
+    <Card>
+      <CardHeader className="border-b">
+        <SectionTitle number={1} title={i18next.t("setup:Choose an AI Model")} />
+        <CardDescription>
+          {i18next.t("setup:Select the AI provider you want to use")}
+        </CardDescription>
+      </CardHeader>
 
-      <div className="grid gap-3 mb-6" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))" }}>
-        {modelTypes.map((type) => (
-          <SelectableCard
-            key={type}
-            logo={getProviderLogoURL({ category: "Model", type })}
-            label={type}
-            desc={getModelProviderMetadata(type).desc}
-            selected={selectedModelType === type}
-            onClick={() => onSelectModel(type)}
-          />
-        ))}
-      </div>
+      <CardContent className="pt-4">
+        <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))" }}>
+          {modelTypes.map((type) => (
+            <SelectableCard
+              key={type}
+              logo={getProviderLogoURL({ category: "Model", type })}
+              label={type}
+              desc={getModelProviderMetadata(type).desc}
+              selected={selectedModelType === type}
+              onClick={() => onSelectModel(type)}
+            />
+          ))}
+        </div>
 
-      {meta && (
-        <div className="border-t pt-5 mt-1">
-          <div className="text-[15px] font-semibold mb-4">
-            {i18next.t("setup:Configure")} {selectedModelType}
-          </div>
+        {meta && (
+          <>
+            <Separator className="my-5" />
+            <p className="text-sm font-medium mb-4 text-foreground">
+              {i18next.t("setup:Configure")} {selectedModelType}
+            </p>
 
-          <FieldRow label={i18next.t("general:Model")}>
-            {modelList.length > 0 ? (
-              <Select value={subType} onValueChange={(v) => v !== null && setSubType(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={i18next.t("setup:Enter model name")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {modelList.map((m: { id: string; name: string }) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input
-                value={subType}
-                onChange={(e) => setSubType(e.target.value)}
-                placeholder={i18next.t("setup:Enter model name")}
-              />
+            <FieldRow label={i18next.t("general:Model")}>
+              {modelList.length > 0 ? (
+                <Select value={subType} onValueChange={(v) => v !== null && setSubType(v)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={i18next.t("setup:Enter model name")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelList.map((m: { id: string; name: string }) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={subType}
+                  onChange={(e) => setSubType(e.target.value)}
+                  placeholder={i18next.t("setup:Enter model name")}
+                />
+              )}
+            </FieldRow>
+
+            {meta.needsClientId && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FieldRow
+                  label={
+                    selectedModelType === "Amazon Bedrock"
+                      ? "Access Key ID"
+                      : selectedModelType === "Azure"
+                        ? i18next.t("provider:Deployment name")
+                        : "Client ID"
+                  }
+                >
+                  <Input
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    placeholder={selectedModelType === "Azure" ? i18next.t("setup:Enter deployment name") : "AKIA..."}
+                  />
+                </FieldRow>
+              </div>
             )}
-          </FieldRow>
 
-          {meta.needsClientId && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {meta.needsApiKey && (
               <FieldRow
-                label={
-                  selectedModelType === "Amazon Bedrock"
-                    ? "Access Key ID"
-                    : selectedModelType === "Azure"
-                      ? i18next.t("provider:Deployment name")
-                      : "Client ID"
-                }
+                label={i18next.t("setup:API Key")}
+                hint={i18next.t("setup:Your secret API key from the provider dashboard")}
               >
                 <Input
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  placeholder={selectedModelType === "Azure" ? i18next.t("setup:Enter deployment name") : "AKIA..."}
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-..."
                 />
               </FieldRow>
-            </div>
-          )}
+            )}
 
-          {meta.needsApiKey && (
-            <FieldRow
-              label={i18next.t("setup:API Key")}
-              hint={i18next.t("setup:Your secret API key from the provider dashboard")}
-            >
-              <Input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-..."
-                className="h-10"
-              />
-            </FieldRow>
-          )}
-
-          {meta.needsRegion && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FieldRow label={i18next.t("general:Region")}>
-                <Input
-                  value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                  placeholder="us-east-1"
-                />
-              </FieldRow>
-            </div>
-          )}
-
-          {meta.needsUrl && (
-            <FieldRow
-              label={
-                selectedModelType === "Ollama"
-                  ? i18next.t("setup:Ollama Server URL")
-                  : i18next.t("setup:API Endpoint URL")
-              }
-              hint={
-                selectedModelType === "Ollama"
-                  ? i18next.t("setup:Make sure Ollama is running locally before saving")
-                  : undefined
-              }
-            >
-              <div className="relative">
-                <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={providerUrl}
-                  onChange={(e) => setProviderUrl(e.target.value)}
-                  placeholder={meta.urlPlaceholder || "https://"}
-                  className="pl-9 h-10"
-                />
+            {meta.needsRegion && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FieldRow label={i18next.t("general:Region")}>
+                  <Input
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    placeholder="us-east-1"
+                  />
+                </FieldRow>
               </div>
-            </FieldRow>
-          )}
-        </div>
-      )}
-    </div>
+            )}
+
+            {meta.needsUrl && (
+              <FieldRow
+                label={
+                  selectedModelType === "Ollama"
+                    ? i18next.t("setup:Ollama Server URL")
+                    : i18next.t("setup:API Endpoint URL")
+                }
+                hint={
+                  selectedModelType === "Ollama"
+                    ? i18next.t("setup:Make sure Ollama is running locally before saving")
+                    : undefined
+                }
+              >
+                <div className="relative">
+                  <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={providerUrl}
+                    onChange={(e) => setProviderUrl(e.target.value)}
+                    placeholder={meta.urlPlaceholder || "https://"}
+                    className="pl-9"
+                  />
+                </div>
+              </FieldRow>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }

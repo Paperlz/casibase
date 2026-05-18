@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { CheckCircle2Icon } from "lucide-react"
+import { CheckIcon } from "lucide-react"
 import { Badge } from "~/components/ui/badge"
+import { Card, CardContent, CardTitle } from "~/components/ui/card"
+import { Label } from "~/components/ui/label"
 import { cn } from "~/lib/utils"
 
 interface SelectableCardProps {
@@ -22,34 +24,39 @@ interface SelectableCardProps {
   desc: string
   selected: boolean
   onClick: () => void
+  icon?: React.ReactNode
 }
 
-export function SelectableCard({ logo, label, desc, selected, onClick }: SelectableCardProps) {
+export function SelectableCard({ logo, label, desc, selected, onClick, icon }: SelectableCardProps) {
   return (
-    <div
+    <Card
       onClick={onClick}
       className={cn(
-        "relative cursor-pointer rounded-xl border-2 p-3 text-center transition-all select-none",
+        "relative cursor-pointer select-none transition-all",
         selected
-          ? "border-primary bg-primary/5"
-          : "border-border bg-card hover:border-primary/40 hover:bg-accent/40"
+          ? "ring-2 ring-primary bg-primary/5"
+          : "hover:ring-primary/40 hover:bg-accent/40"
       )}
     >
       {selected && (
-        <CheckCircle2Icon className="absolute top-1.5 right-1.5 h-4 w-4 text-primary" />
+        <span className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary">
+          <CheckIcon className="h-2.5 w-2.5 text-primary-foreground" />
+        </span>
       )}
-      <div className="flex h-11 items-center justify-center mb-2">
-        {logo ? (
-          <img src={logo} alt={label} className="max-w-[44px] max-h-[44px] object-contain" />
-        ) : (
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-muted text-lg font-bold text-muted-foreground">
-            {label[0]}
-          </div>
-        )}
-      </div>
-      <div className="text-[13px] font-semibold leading-tight mb-0.5">{label}</div>
-      <div className="text-[11px] text-muted-foreground leading-tight">{desc}</div>
-    </div>
+      <CardContent className="flex flex-col items-center text-center py-2 px-1.5">
+        <div className="flex h-8 w-8 items-center justify-center mb-1.5">
+          {icon ?? (logo ? (
+            <img src={logo} alt={label} className="max-w-[32px] max-h-[32px] object-contain" />
+          ) : (
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-sm font-bold text-muted-foreground">
+              {label[0]}
+            </div>
+          ))}
+        </div>
+        <div className="text-[11px] font-semibold leading-tight mb-0.5 truncate w-full">{label}</div>
+        <div className="text-[10px] text-muted-foreground leading-tight line-clamp-2">{desc}</div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -61,18 +68,16 @@ interface SectionTitleProps {
 
 export function SectionTitle({ number, title, subtitle }: SectionTitleProps) {
   return (
-    <div className="mb-5">
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[14px] font-bold text-primary-foreground">
-          {number}
-        </div>
-        <span className="text-[18px] font-bold">{title}</span>
-        {subtitle && (
-          <Badge variant="secondary" className="font-normal">
-            {subtitle}
-          </Badge>
-        )}
-      </div>
+    <div className="flex items-center gap-2.5">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+        {number}
+      </span>
+      <CardTitle className="text-base">{title}</CardTitle>
+      {subtitle && (
+        <Badge variant="secondary" className="font-normal text-xs">
+          {subtitle}
+        </Badge>
+      )}
     </div>
   )
 }
@@ -85,10 +90,10 @@ interface FieldRowProps {
 
 export function FieldRow({ label, children, hint }: FieldRowProps) {
   return (
-    <div className="mb-4">
-      <div className="mb-1.5 text-sm font-medium">{label}</div>
+    <div className="space-y-1.5 mb-4">
+      <Label className="text-sm font-medium">{label}</Label>
       {children}
-      {hint && <div className="mt-1 text-xs text-muted-foreground">{hint}</div>}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   )
 }
