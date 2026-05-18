@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useNavigate } from "react-router"
 import { type Account, getAccount, signout } from "~/backend/AccountBackend"
 import { setLanguage } from "~/i18n"
 
@@ -15,7 +14,6 @@ type AccountState = {
 const AccountContext = React.createContext<AccountState | null>(null)
 
 export function AccountProvider({ children }: { children: React.ReactNode }) {
-  const navigate = useNavigate()
   const [account, setAccount] = React.useState<Account | null | undefined>(undefined)
 
   const load = React.useCallback(() => {
@@ -39,9 +37,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const handleSignout = React.useCallback(() => {
     signout().then(() => {
       setAccount(null)
-      navigate("/signin")
+    }).catch(() => {
+      setAccount(null)
     })
-  }, [navigate])
+  }, [])
 
   return (
     <AccountContext.Provider value={{ account, reload: load, handleSignout }}>

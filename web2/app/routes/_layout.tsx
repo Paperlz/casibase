@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from "react-router"
+import { Navigate, Outlet } from "react-router"
 import { useTranslation } from "react-i18next"
 
 import { AccountProvider, useAccount } from "~/context/AccountContext"
@@ -11,12 +11,10 @@ import "~/i18n"
 function LayoutInner() {
   const { i18n } = useTranslation()
   const { account, handleSignout } = useAccount()
-  const navigate = useNavigate()
 
   // Redirect to signin when explicitly not authenticated (null = confirmed no session)
   if (account === null) {
-    navigate("/signin")
-    return null
+    return <Navigate to="/signin" replace />
   }
 
   return (
