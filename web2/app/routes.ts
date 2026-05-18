@@ -29,6 +29,10 @@ export default [
     route("tools", "routes/ToolListPage.tsx"),
     route("tools/:toolName", "routes/ToolEditPage.tsx"),
 
+    // MCP Servers
+    route("servers", "routes/ServerListPage.tsx"),
+    route("servers/:serverName", "routes/ServerEditPage.tsx"),
+
     // Sites
     route("sites", "routes/SiteListPage.tsx"),
     route("sites/:owner/:siteName", "routes/SiteEditPage.tsx"),
