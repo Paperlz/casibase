@@ -1,14 +1,16 @@
 import * as React from "react"
 import { NavLink, useLocation } from "react-router"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 import { type Account, isAdminUser, isChatAdminUser } from "~/backend/AccountBackend"
+import { isCasdoorAvailable, getAuthConfig } from "~/lib/AuthConfig"
+import { ServerUrl } from "~/lib/api"
 import {
   BarChart2Icon,
   BrainCircuitIcon,
   ChevronRightIcon,
   CodeIcon,
   DatabaseIcon,
-  FileTextIcon,
   FolderOpenIcon,
   HomeIcon,
   InboxIcon,
@@ -27,7 +29,6 @@ import {
   ServerIcon,
   SettingsIcon,
   ShieldIcon,
-  UsersIcon,
   UserIcon,
   WrenchIcon,
   ZapIcon,
@@ -55,6 +56,8 @@ type NavItem = {
   url: string
   icon: React.ComponentType<{ className?: string }>
   external?: boolean
+  /** If set, URL is built from the Casdoor issuer: `${issuer}${casdoorPath}` */
+  casdoorPath?: string
 }
 
 type NavGroup = {
@@ -114,7 +117,6 @@ const navGroups: NavGroup[] = [
     items: [
       { title: "Tasks", url: "/tasks", icon: ListIcon },
       { title: "Scales", url: "/scales", icon: BarChart2Icon },
-      { title: "Forms", url: "/forms", icon: FileTextIcon },
     ],
   },
   {
@@ -133,9 +135,8 @@ const navGroups: NavGroup[] = [
     icon: LockIcon,
     key: "identity",
     items: [
-      { title: "Users", url: "/users", icon: UserIcon },
-      { title: "Casdoor Resources", url: "/casdoor-resources", icon: UsersIcon },
-      { title: "Permissions", url: "/permissions", icon: ShieldIcon },
+      { title: "Users", url: "/users", icon: UserIcon, casdoorPath: "/users", external: true },
+      { title: "Permissions", url: "/permissions", icon: ShieldIcon, casdoorPath: "/permissions", external: true },
     ],
   },
   {
@@ -149,7 +150,7 @@ const navGroups: NavGroup[] = [
       { title: "Usages", url: "/usages", icon: LineChartIcon },
       { title: "Visitors", url: "/visitors", icon: BarChart2Icon },
       { title: "System Info", url: "/sysinfo", icon: MonitorIcon },
-      { title: "Swagger", url: "/swagger", icon: CodeIcon, external: true },
+      { title: "Swagger", url: `${ServerUrl}/swagger/index.html`, icon: CodeIcon, external: true },
     ],
   },
 ]
@@ -158,18 +159,46 @@ function getActiveGroupKey(pathname: string): string | null {
   if (pathname.includes("/chats") || pathname.includes("/messages") || pathname.includes("/stores")) return "basic"
   if (pathname.includes("/providers") || pathname.includes("/pipes") || pathname.includes("/tools") || pathname.includes("/servers")) return "connectors"
   if (pathname.includes("/files") || pathname.includes("/vectors")) return "knowledge-base"
-  if (pathname.includes("/tasks") || pathname.includes("/scales") || pathname.includes("/forms")) return "multimedia"
+  if (pathname.includes("/tasks") || pathname.includes("/scales")) return "multimedia"
   if (pathname.includes("/sessions") || pathname.includes("/records")) return "logs"
   if (pathname.includes("/users") || pathname.includes("/permissions")) return "identity"
   if (pathname.includes("/sysinfo") || pathname.includes("/visitors") || pathname.includes("/sites") || pathname.includes("/usages") || pathname.includes("/resources")) return "admin"
   return null
 }
 
-function NavGroupItem({ group, defaultOpen }: { group: NavGroup; defaultOpen: boolean }) {
+function NavGroupItem({
+  group,
+  defaultOpen,
+  casdoorAvailable,
+  casdoorIssuer,
+}: {
+  group: NavGroup
+  defaultOpen: boolean
+  casdoorAvailable: boolean
+  casdoorIssuer: string
+}) {
   const location = useLocation()
   const { t } = useTranslation("general")
   const Icon = group.icon
   const title = t(group.title)
+
+  function renderSubButton(item: NavItem) {
+    if (item.casdoorPath) {
+      if (casdoorAvailable) {
+        return <a href={`${casdoorIssuer}${item.casdoorPath}`} target="_blank" rel="noreferrer" />
+      }
+      return (
+        <button
+          type="button"
+          onClick={() => toast.warning(t("Identity requires Casdoor - Tooltip"))}
+        />
+      )
+    }
+    if (item.external) {
+      return <a href={item.url} target="_blank" rel="noreferrer" />
+    }
+    return <NavLink to={item.url} />
+  }
 
   return (
     <Collapsible defaultOpen={defaultOpen} className="group/collapsible">
@@ -185,11 +214,11 @@ function NavGroupItem({ group, defaultOpen }: { group: NavGroup; defaultOpen: bo
         <CollapsibleContent>
           <SidebarMenuSub>
             {group.items.map((item) => {
-              const isActive = location.pathname.startsWith(item.url) && item.url !== "/"
+              const isActive = !item.casdoorPath && location.pathname.startsWith(item.url) && item.url !== "/"
               return (
-                <SidebarMenuSubItem key={item.url}>
+                <SidebarMenuSubItem key={item.title}>
                   <SidebarMenuSubButton
-                    render={item.external ? <a href={item.url} target="_blank" rel="noreferrer" /> : <NavLink to={item.url} />}
+                    render={renderSubButton(item)}
                     isActive={isActive}
                   >
                     <span>{t(item.title)}</span>
@@ -214,6 +243,9 @@ export function AppSidebar({
   const { getLogoUrl } = useSite()
   const activeGroupKey = getActiveGroupKey(location.pathname)
   const logoUrl = getLogoUrl(theme)
+
+  const casdoorAvailable = isCasdoorAvailable()
+  const casdoorIssuer = getAuthConfig().issuer
 
   // Filter nav groups based on user role
   const visibleGroups = React.useMemo(() => {
@@ -271,6 +303,8 @@ export function AppSidebar({
                   activeGroupKey === group.key ||
                   ["basic", "knowledge-base", "connectors", "admin"].includes(group.key)
                 }
+                casdoorAvailable={casdoorAvailable}
+                casdoorIssuer={casdoorIssuer}
               />
             ))}
           </SidebarMenu>

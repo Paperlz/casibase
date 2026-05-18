@@ -76,7 +76,6 @@ function buildTree(): TreeNode[] {
           children: [
             { key: "/tasks", label: i18next.t("general:Tasks") },
             { key: "/scales", label: i18next.t("general:Scales") },
-            { key: "/forms", label: i18next.t("general:Forms") },
           ],
         },
         {
@@ -93,7 +92,6 @@ function buildTree(): TreeNode[] {
           casdoorRequired: true,
           children: [
             { key: "/users", label: i18next.t("general:Users"), casdoorRequired: true },
-            { key: "/casdoor-resources", label: i18next.t("general:Resources"), casdoorRequired: true },
             { key: "/permissions", label: i18next.t("general:Permissions"), casdoorRequired: true },
           ],
         },
