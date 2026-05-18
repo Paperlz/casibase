@@ -77,5 +77,9 @@ export default [
     // Records
     route("records", "routes/RecordListPage.tsx"),
     route("records/:organizationName/:recordName", "routes/RecordEditPage.tsx"),
+
+    // Tasks
+    route("tasks", "routes/TaskListPage.tsx"),
+    route("tasks/:owner/:taskName", "routes/TaskEditPage.tsx"),
   ]),
 ] satisfies RouteConfig
