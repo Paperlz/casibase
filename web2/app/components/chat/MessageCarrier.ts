@@ -1,5 +1,6 @@
 import { SuggestionCarrier } from "~/carrier/SuggestionCarrier"
 import { TitleCarrier } from "~/carrier/TitleCarrier"
+import { resolveChatTitle } from "~/carrier/titleUtils"
 import type { Suggestion } from "~/backend/MessageBackend"
 
 export type ParsedAnswer = {
@@ -17,9 +18,13 @@ export class MessageCarrier {
     this.titleCarrier = new TitleCarrier(needTitle)
   }
 
-  parseAnswerWithCarriers(answer: string): ParsedAnswer {
+  parseAnswerWithCarriers(answer: string, userMessage = ""): ParsedAnswer {
     const { parsedAnswer, title } = this.titleCarrier.parseAnswerAndTitle(answer)
     const { finalAnswer, suggestionArray } = this.suggestionCarrier.parseAnswerAndSuggestions(parsedAnswer)
-    return { finalAnswer, suggestionArray, title }
+    return {
+      finalAnswer,
+      suggestionArray,
+      title: resolveChatTitle(title, userMessage),
+    }
   }
 }

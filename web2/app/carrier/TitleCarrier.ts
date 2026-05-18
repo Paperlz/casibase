@@ -1,3 +1,5 @@
+import { normalizeAITitle } from "~/carrier/titleUtils"
+
 export class TitleCarrier {
   private divider = "====="
 
@@ -7,6 +9,6 @@ export class TitleCarrier {
     if (!this.needTitle) return { parsedAnswer: answer, title: "" }
     const parts = answer.split(this.divider)
     if (parts.length < 2) return { parsedAnswer: answer, title: "" }
-    return { parsedAnswer: parts[0], title: parts[1] }
+    return { parsedAnswer: parts[0], title: normalizeAITitle(parts[1]) }
   }
 }

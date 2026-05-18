@@ -134,12 +134,12 @@ They must:
 	}
 	if needTitle {
 		fullPrompt.WriteString(`
-**Finally, generate a concise and meaningful title for the original question. No need to answer user question. 
+**Finally, generate a concise and meaningful title for the original question. No need to answer user question.
 A meaningful topic title should be able to represent the user's purpose or the overall theme of this conversation.
 Examples of generated title:
 	query: what is openagent? title: introduction to openagent
 - The title must start with "=====" (five equals signs, no space).
-- Do not include the divider or title if a meaningful title cannot be generated.
+- You MUST output a title unless the user's message is completely empty.
 - Do NOT include any explanations or extra text—just output the title.`)
 	}
 

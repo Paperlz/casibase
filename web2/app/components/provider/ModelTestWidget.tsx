@@ -20,8 +20,10 @@ import {
   closeMessageEventSource,
   getChatMessages,
   updateMessage,
+  type ChatStreamUpdate,
   type Message,
 } from "~/backend/MessageBackend"
+import { getFirstUserMessageText } from "~/carrier/titleUtils"
 import {
   getProviderDisplayName,
   getProviderLogoUrl,
@@ -114,6 +116,19 @@ export default function ModelTestWidget({
     )
   }
 
+  function applyChatUpdateFromServer(update: ChatStreamUpdate, targetChat: Chat) {
+    if (!update?.name || update.name !== targetChat.name || !update.displayName) return
+    setChat((current) =>
+      current?.name === targetChat.name
+        ? {
+            ...current,
+            displayName: update.displayName ?? current.displayName,
+            needTitle: update.needTitle ?? false,
+          }
+        : current
+    )
+  }
+
   const loadMessages = useCallback(
     (targetChat: Chat) => {
       setMessageError(false)
@@ -147,7 +162,9 @@ export default function ModelTestWidget({
                 return
               }
               streamAnswer(lastMessage, targetChat, {
+                userTextForTitle: getFirstUserMessageText(loadedMessages),
                 onTitle: updateChatDisplayName,
+                onChat: (update) => applyChatUpdateFromServer(update, targetChat),
                 onDone: () => setTimeout(scrollToBottom, 50),
               })
             } else {

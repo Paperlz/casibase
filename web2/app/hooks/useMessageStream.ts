@@ -1,13 +1,16 @@
 import { useCallback } from "react"
 import { toast } from "sonner"
 import { MessageCarrier } from "~/components/chat/MessageCarrier"
-import { getMessageAnswer, type Message } from "~/backend/MessageBackend"
+import { hasTitleDivider } from "~/carrier/titleUtils"
+import { getMessageAnswer, type ChatStreamUpdate, type Message } from "~/backend/MessageBackend"
 import { renderReason, renderText } from "~/lib/ChatMessageRender"
 import type { Chat } from "~/backend/ChatBackend"
 import type { Dispatch, SetStateAction } from "react"
 
 type StreamOptions = {
+  userTextForTitle?: string
   onTitle?: (title: string, chat: Chat) => void
+  onChat?: (update: ChatStreamUpdate, chat: Chat) => void
   onDone?: () => void
 }
 
@@ -22,6 +25,7 @@ export function useMessageStream(
       let text = ""
       let reasonText = ""
       const carrier = new MessageCarrier(targetChat.needTitle)
+      const userTextForTitle = opts?.userTextForTitle ?? ""
 
       getMessageAnswer(
         lastMessage.owner,
@@ -30,8 +34,10 @@ export function useMessageStream(
           const json = JSON.parse(data)
           if (json.text === "") json.text = "\n"
           text += json.text
-          const parsed = carrier.parseAnswerWithCarriers(text)
-          opts?.onTitle?.(parsed.title, targetChat)
+          const parsed = carrier.parseAnswerWithCarriers(text, userTextForTitle)
+          if (hasTitleDivider(text) && parsed.title) {
+            opts?.onTitle?.(parsed.title, targetChat)
+          }
           setMessages((prev) => {
             if (!prev.length) return prev
             const updated = [...prev]
@@ -113,11 +119,12 @@ export function useMessageStream(
           toast.error(error)
         },
         () => {
+          const parsed = carrier.parseAnswerWithCarriers(text, userTextForTitle)
+          opts?.onTitle?.(parsed.title, targetChat)
           setMessages((prev) => {
             if (!prev.length) return prev
             const updated = [...prev]
             const last = { ...updated[updated.length - 1] }
-            const parsed = carrier.parseAnswerWithCarriers(text)
             last.text = parsed.finalAnswer
             last.suggestions = parsed.suggestionArray
             last.html = renderText(last.text)
@@ -137,6 +144,9 @@ export function useMessageStream(
             updated[updated.length - 1] = { ...updated[updated.length - 1], hintText: infoText }
             return updated
           })
+        },
+        (update) => {
+          opts?.onChat?.(update, targetChat)
         }
       )
     },

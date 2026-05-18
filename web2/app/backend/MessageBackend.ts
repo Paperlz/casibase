@@ -112,6 +112,13 @@ export function deleteMessage(message: Partial<Message>): Promise<any> {
 
 const eventSourceMap = new Map<string, EventSource>()
 
+export type ChatStreamUpdate = {
+  owner?: string
+  name: string
+  displayName?: string
+  needTitle?: boolean
+}
+
 export function getMessageAnswer(
   owner: string,
   name: string,
@@ -122,7 +129,8 @@ export function getMessageAnswer(
   onVector: (data: string) => void,
   onError: (data: string) => void,
   onEnd: (data: string) => void,
-  onInfo?: (data: string) => void
+  onInfo?: (data: string) => void,
+  onChat?: (update: ChatStreamUpdate) => void
 ): void {
   const key = `${owner}/${name}`
   if (eventSourceMap.has(key)) return
@@ -141,6 +149,15 @@ export function getMessageAnswer(
   eventSource.addEventListener("vector", (e) => onVector(e.data))
   if (onInfo) {
     eventSource.addEventListener("myinfo", (e) => onInfo(e.data))
+  }
+  if (onChat) {
+    eventSource.addEventListener("chat", (e) => {
+      try {
+        onChat(JSON.parse(e.data) as ChatStreamUpdate)
+      } catch {
+        // ignore malformed chat events
+      }
+    })
   }
   eventSource.addEventListener("myerror", (e) => {
     onError(e.data)

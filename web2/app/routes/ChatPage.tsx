@@ -10,6 +10,8 @@ import ChatMenu, { type ChatMenuHandle } from "~/components/chat/ChatMenu"
 import ChatInput, { type ChatInputHandle } from "~/components/chat/ChatInput"
 import MessageList from "~/components/chat/MessageList"
 import WelcomeHeader from "~/components/chat/WelcomeHeader"
+import { getFirstUserMessageText } from "~/carrier/titleUtils"
+import type { ChatStreamUpdate } from "~/backend/MessageBackend"
 import { useAccount } from "~/context/AccountContext"
 import { getChats, deleteChat, updateChat } from "~/backend/ChatBackend"
 import { getChatMessages, addMessage, updateMessage, closeMessageEventSource } from "~/backend/MessageBackend"
@@ -129,7 +131,9 @@ export default function ChatPage() {
               return
             }
             streamAnswer(lastMsg, targetChat, {
+              userTextForTitle: getFirstUserMessageText(msgs),
               onTitle: updateChatDisplayName,
+              onChat: (update) => applyChatUpdateFromServer(update, targetChat),
             })
           } else {
             setMessageLoading(false)
@@ -145,7 +149,34 @@ export default function ChatPage() {
   function updateChatDisplayName(title: string, targetChat: Chat) {
     if (!title) return
     setChats((prev) =>
-      prev.map((c) => (c.name === targetChat.name ? { ...c, displayName: title } : c))
+      prev.map((c) => (c.name === targetChat.name ? { ...c, displayName: title, needTitle: false } : c))
+    )
+    setChat((prev) =>
+      prev?.name === targetChat.name ? { ...prev, displayName: title, needTitle: false } : prev
+    )
+  }
+
+  function applyChatUpdateFromServer(update: ChatStreamUpdate, targetChat: Chat) {
+    if (!update?.name || update.name !== targetChat.name || !update.displayName) return
+    setChats((prev) =>
+      prev.map((c) =>
+        c.name === update.name
+          ? {
+              ...c,
+              displayName: update.displayName ?? c.displayName,
+              needTitle: update.needTitle ?? false,
+            }
+          : c
+      )
+    )
+    setChat((prev) =>
+      prev?.name === update.name
+        ? {
+            ...prev,
+            displayName: update.displayName ?? prev.displayName,
+            needTitle: update.needTitle ?? false,
+          }
+        : prev
     )
   }
 
