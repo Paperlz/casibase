@@ -27,6 +27,10 @@ export type Vector = {
   data?: number[]
   size?: number
   dimension?: number
+  tokenCount?: number
+  score?: number
+  price?: number
+  currency?: string
 }
 
 export function getGlobalVectors(): Promise<any> {

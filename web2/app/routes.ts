@@ -63,6 +63,10 @@ export default [
     route("messages", "routes/MessageListPage.tsx"),
     route("messages/:messageName", "routes/MessageEditPage.tsx"),
 
+    // Files
+    route("files", "routes/FileListPage.tsx"),
+    route("files/:fileName", "routes/FileViewPage.tsx"),
+
     // Vectors
     route("vectors", "routes/VectorListPage.tsx"),
     route("vectors/:vectorName", "routes/VectorEditPage.tsx"),
