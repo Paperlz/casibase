@@ -88,5 +88,8 @@ export default [
 
     // Resources
     route("resources", "routes/ResourceListPage.tsx"),
+
+    // Account
+    route("account", "routes/AccountPage.tsx"),
   ]),
 ] satisfies RouteConfig
