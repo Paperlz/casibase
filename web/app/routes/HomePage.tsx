@@ -320,7 +320,7 @@ export default function HomePage() {
         <div className="relative max-w-2xl">
           <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
             <SparklesIcon className="h-3 w-3" />
-            OpenAgent Platform
+            {t("home:OpenAgent Platform")}
           </div>
           <h1 className="text-4xl font-bold tracking-tight">{welcomeTitle}</h1>
           <p className="mt-3 text-base leading-relaxed text-muted-foreground">{welcomeText}</p>
