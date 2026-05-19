@@ -3,30 +3,44 @@ import { Link } from "react-router"
 import { useTranslation } from "react-i18next"
 import {
   ArrowRightIcon,
+  BarChart2Icon,
   BotIcon,
+  CodeIcon,
   DatabaseIcon,
   FileTextIcon,
   GitBranchIcon,
-  KeyRoundIcon,
+  InboxIcon,
   LayoutGridIcon,
+  LayoutIcon,
+  LineChartIcon,
+  ListIcon,
   MessageCircleIcon,
+  MessageSquareIcon,
+  MonitorIcon,
   NetworkIcon,
   PlugIcon,
   RocketIcon,
   ServerIcon,
   ShieldCheckIcon,
+  ShieldIcon,
   SparklesIcon,
+  UserIcon,
   WrenchIcon,
   ZapIcon,
 } from "lucide-react"
 import { getBuiltInSite } from "~/backend/SiteBackend"
 import { useSite } from "~/context/SiteContext"
+import { isCasdoorAvailable, getAuthConfig } from "~/lib/AuthConfig"
+import { ServerUrl } from "~/lib/api"
 
 interface QuickLink {
   title: string
   description: string
   href: string
+  navKey?: string
   icon: React.ComponentType<{ className?: string }>
+  external?: boolean
+  casdoorPath?: string
 }
 
 interface Section {
@@ -43,6 +57,9 @@ export default function HomePage() {
   const { site } = useSite()
   const [welcomeTitle, setWelcomeTitle] = useState<string>(t("home:Welcome to OpenAgent"))
   const [welcomeText, setWelcomeText] = useState<string>(t("home:Welcome subtitle"))
+
+  const casdoorAvailable = isCasdoorAvailable()
+  const casdoorIssuer = getAuthConfig().issuer
 
   useEffect(() => {
     getBuiltInSite().then((res) => {
@@ -62,7 +79,7 @@ export default function HomePage() {
 
   const allSections: Section[] = [
     {
-      label: t("general:Knowledge Base"),
+      label: t("general:Basic"),
       items: [
         {
           title: t("general:Stores"),
@@ -70,6 +87,23 @@ export default function HomePage() {
           href: "/stores",
           icon: LayoutGridIcon,
         },
+        {
+          title: t("general:Chats"),
+          description: t("home:Browse and manage chat conversations"),
+          href: "/chats",
+          icon: ListIcon,
+        },
+        {
+          title: t("general:Messages"),
+          description: t("home:View and manage chat messages"),
+          href: "/messages",
+          icon: MessageSquareIcon,
+        },
+      ],
+    },
+    {
+      label: t("general:Knowledge Base"),
+      items: [
         {
           title: t("general:Files"),
           description: t("home:Upload and manage knowledge files"),
@@ -120,7 +154,7 @@ export default function HomePage() {
       ],
     },
     {
-      label: t("home:Automation"),
+      label: t("general:Multimedia"),
       items: [
         {
           title: t("general:Tasks"),
@@ -137,10 +171,10 @@ export default function HomePage() {
       ],
     },
     {
-      label: t("home:Monitoring"),
+      label: t("general:Auditing Logs"),
       items: [
         {
-          title: t("home:Audit Logs"),
+          title: t("general:Logs"),
           description: t("home:Track and review all agent activity"),
           href: "/records",
           icon: FileTextIcon,
@@ -151,11 +185,70 @@ export default function HomePage() {
           href: "/sessions",
           icon: ShieldCheckIcon,
         },
+      ],
+    },
+    {
+      label: t("general:Identity"),
+      items: [
         {
-          title: t("home:API Keys"),
-          description: t("home:Manage access credentials and API keys"),
+          title: t("general:Users"),
+          description: t("home:Manage user accounts and access"),
+          href: "/users",
+          icon: UserIcon,
+          casdoorPath: "/users",
+          external: true,
+        },
+        {
+          title: t("general:Permissions"),
+          description: t("home:Configure role-based access control"),
+          href: "/permissions",
+          icon: ShieldIcon,
+          casdoorPath: "/permissions",
+          external: true,
+        },
+      ],
+    },
+    {
+      label: t("general:Admin"),
+      items: [
+        {
+          title: t("general:Sites"),
+          description: t("home:Configure site settings and branding"),
+          href: "/sites/admin/site-built-in",
+          navKey: "/sites",
+          icon: LayoutIcon,
+        },
+        {
+          title: t("general:Resources"),
+          description: t("home:Manage system resources and assets"),
+          href: "/resources",
+          icon: InboxIcon,
+        },
+        {
+          title: t("general:Usages"),
+          description: t("home:Monitor AI usage and analytics"),
           href: "/usages",
-          icon: KeyRoundIcon,
+          icon: LineChartIcon,
+        },
+        {
+          title: t("general:Visitors"),
+          description: t("home:Track visitor traffic and statistics"),
+          href: "/visitors",
+          icon: BarChart2Icon,
+        },
+        {
+          title: t("general:System Info"),
+          description: t("home:View system status and performance"),
+          href: "/sysinfo",
+          icon: MonitorIcon,
+        },
+        {
+          title: "Swagger",
+          description: t("home:Browse and test the API documentation"),
+          href: `${ServerUrl}/swagger/index.html`,
+          navKey: "/swagger",
+          icon: CodeIcon,
+          external: true,
         },
       ],
     },
@@ -164,9 +257,58 @@ export default function HomePage() {
   const sections = allSections
     .map(section => ({
       ...section,
-      items: section.items.filter(item => isNavKeyVisible(item.href)),
+      items: section.items.filter(item => isNavKeyVisible(item.navKey ?? item.href)),
     }))
     .filter(section => section.items.length > 0)
+
+  const cardClass = "group flex flex-col gap-3 rounded-xl border border-border bg-card p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/30 hover:shadow-md"
+
+  function renderCard(item: QuickLink) {
+    const Icon = item.icon
+    const isCasdoorItem = !!item.casdoorPath
+    const isDisabled = isCasdoorItem && !casdoorAvailable
+    const href = isCasdoorItem ? `${casdoorIssuer}${item.casdoorPath}` : item.href
+    const isExternal = item.external || isCasdoorItem
+
+    const inner = (
+      <>
+        <div className="flex items-start justify-between">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+            <Icon className="h-4 w-4 text-primary" />
+          </div>
+          <ArrowRightIcon className="h-4 w-4 translate-x-0 text-transparent transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-muted-foreground/50" />
+        </div>
+        <div>
+          <div className="text-sm font-semibold leading-snug">{item.title}</div>
+          <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{item.description}</div>
+        </div>
+      </>
+    )
+
+    if (isDisabled) {
+      return (
+        <div
+          key={item.href}
+          className={`${cardClass} cursor-not-allowed opacity-50`}
+          title={t("general:Requires Casdoor to be installed")}
+        >
+          {inner}
+        </div>
+      )
+    }
+    if (isExternal) {
+      return (
+        <a key={item.href} href={href} target="_blank" rel="noreferrer" className={cardClass}>
+          {inner}
+        </a>
+      )
+    }
+    return (
+      <Link key={item.href} to={item.href} className={cardClass}>
+        {inner}
+      </Link>
+    )
+  }
 
   return (
     <div className="min-h-full">
@@ -213,29 +355,7 @@ export default function HomePage() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {section.items.map((item) => {
-                const Icon = item.icon
-                return (
-                  <Link
-                    key={item.href}
-                    to={item.href}
-                    className="group flex flex-col gap-3 rounded-xl border border-border bg-card p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/30 hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                        <Icon className="h-4 w-4 text-primary" />
-                      </div>
-                      <ArrowRightIcon className="h-4 w-4 translate-x-0 text-transparent transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-muted-foreground/50" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold leading-snug">{item.title}</div>
-                      <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                        {item.description}
-                      </div>
-                    </div>
-                  </Link>
-                )
-              })}
+              {section.items.map(renderCard)}
             </div>
           </div>
         ))}
