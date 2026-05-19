@@ -243,7 +243,7 @@ export default function HomePage() {
           icon: MonitorIcon,
         },
         {
-          title: "Swagger",
+          title: t("general:API Docs"),
           description: t("home:Browse and test the API documentation"),
           href: `${ServerUrl}/swagger/index.html`,
           navKey: "/swagger",

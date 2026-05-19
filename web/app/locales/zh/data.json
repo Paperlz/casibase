@@ -67,6 +67,7 @@
     "Filename": "文件名"
   },
   "general": {
+    "API Docs": "API文档",
     "Access secret": "访问密钥",
     "Action": "操作",
     "Action - Tooltip": "业务操作类型代码",

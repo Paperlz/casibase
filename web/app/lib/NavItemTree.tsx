@@ -104,7 +104,7 @@ function buildTree(): TreeNode[] {
             { key: "/usages", label: i18next.t("general:Usages") },
             { key: "/visitors", label: i18next.t("general:Visitors") },
             { key: "/sysinfo", label: i18next.t("general:System Info") },
-            { key: "/swagger", label: "Swagger" },
+            { key: "/swagger", label: i18next.t("general:API Docs") },
           ],
         },
       ],

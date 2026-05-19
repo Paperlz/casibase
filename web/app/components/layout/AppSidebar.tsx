@@ -153,7 +153,7 @@ const navGroups: NavGroup[] = [
       { title: "Usages", url: "/usages", icon: LineChartIcon },
       { title: "Visitors", url: "/visitors", icon: BarChart2Icon },
       { title: "System Info", url: "/sysinfo", icon: MonitorIcon },
-      { title: "Swagger", url: `${ServerUrl}/swagger/index.html`, icon: CodeIcon, external: true, navKey: "/swagger" },
+      { title: "general:API Docs", url: `${ServerUrl}/swagger/index.html`, icon: CodeIcon, external: true, navKey: "/swagger" },
     ],
   },
 ]
