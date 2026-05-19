@@ -15,6 +15,7 @@ import KnowledgeSourcesDrawer from "~/components/chat/KnowledgeSourcesDrawer"
 import { renderText } from "~/lib/ChatMessageRender"
 import { getDefaultAiAvatar, getUserAvatar, getRefinedErrorText } from "~/lib/chatUtils"
 import { MessageCarrier } from "~/components/chat/MessageCarrier"
+import AiTypingIndicator from "~/components/chat/AiTypingIndicator"
 import type { Message } from "~/backend/MessageBackend"
 import type { Account } from "~/backend/AccountBackend"
 import type { Store } from "~/backend/StoreBackend"
@@ -291,15 +292,7 @@ export default function MessageItem({
               </div>
             )}
             {isLoading ? (
-              <div className="flex gap-1">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="h-2 w-2 rounded-full bg-muted-foreground/50"
-                    style={{ animation: "thinkingDot 1.2s infinite ease-in-out both", animationDelay: `${i * 0.2}s` }}
-                  />
-                ))}
-              </div>
+              <AiTypingIndicator />
             ) : (
               renderMessageContent()
             )}
