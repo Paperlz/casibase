@@ -123,7 +123,7 @@ docker-compose up
 
 ### Frontend (React)
 
-- UI components use Ant Design v5
+- UI components use shadcn/ui with Tailwind CSS
 - i18n strings must be added to **both** `web/src/locales/en/data.json` and `web/src/locales/zh/data.json`
 - API calls go through helper modules in `web/src/backend/`
 - State via React Context/Hooks — no Redux

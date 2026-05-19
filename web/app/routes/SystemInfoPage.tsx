@@ -102,7 +102,7 @@ function StatTitle({
   )
 }
 
-/** SVG-based circular progress (replaces Ant Design Progress type="circle"/"dashboard") */
+/** SVG-based circular progress */
 function CircleProgress({
   percent,
   color,
