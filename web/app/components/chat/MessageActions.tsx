@@ -1,5 +1,7 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
+  CheckIcon,
   CopyIcon,
   ThumbsUpIcon,
   ThumbsDownIcon,
@@ -35,11 +37,20 @@ function ActionButton({ tooltip, onClick, disabled, children }: ActionButtonProp
   )
 }
 
-export function CopyButton({ message, onCopy }: { message: Message; onCopy: (m: Message) => void }) {
+export function CopyButton({ message, onCopy }: { message: Message; onCopy: (m: Message) => Promise<void> | void }) {
   const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+
+  function handleClick() {
+    Promise.resolve(onCopy(message)).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
   return (
-    <ActionButton tooltip={t("general:Copy")} onClick={() => onCopy(message)}>
-      <CopyIcon className="h-3.5 w-3.5" />
+    <ActionButton tooltip={copied ? t("general:Copied") : t("general:Copy")} onClick={handleClick}>
+      {copied ? <CheckIcon className="h-3.5 w-3.5 text-green-500" /> : <CopyIcon className="h-3.5 w-3.5" />}
     </ActionButton>
   )
 }

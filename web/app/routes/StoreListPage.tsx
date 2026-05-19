@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router"
 import {
+  CheckIcon,
   CopyIcon,
   EditIcon,
   ExternalLinkIcon,
@@ -49,6 +50,29 @@ import {
 
 export function meta() {
   return [{ title: "Stores — OpenAgent" }]
+}
+
+function CopyLinkButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-7 w-7"
+      title={copied ? i18next.t("general:Copied") : i18next.t("general:Copy Link")}
+      onClick={() => {
+        navigator.clipboard.writeText(url).then(() => {
+          toast.success(i18next.t("general:Successfully copied"))
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+        }).catch(() => {
+          toast.error(i18next.t("general:Failed to copy to clipboard"))
+        })
+      }}
+    >
+      {copied ? <CheckIcon className="h-3.5 w-3.5 text-green-500" /> : <CopyIcon className="h-3.5 w-3.5" />}
+    </Button>
+  )
 }
 
 const DEFAULT_AVATAR = "https://cdn.openagentai.org/img/chat/ai.png"
@@ -396,20 +420,7 @@ export default function StoreListPage() {
                       </Button>
                       {!hideChat && (
                         <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title={i18next.t("general:Copy Link")}
-                            onClick={() => {
-                              navigator.clipboard.writeText(
-                                `${window.location.origin}/${store.owner}/${store.name}/chat`
-                              )
-                              toast.success(i18next.t("general:Successfully copied"))
-                            }}
-                          >
-                            <CopyIcon className="h-3.5 w-3.5" />
-                          </Button>
+                          <CopyLinkButton url={`${window.location.origin}/${store.owner}/${store.name}/chat`} />
                           <Button
                             variant="ghost"
                             size="icon"

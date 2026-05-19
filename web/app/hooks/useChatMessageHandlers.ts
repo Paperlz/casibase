@@ -50,8 +50,10 @@ export function useChatMessageHandlers(
     div.innerHTML = message.text || ""
     const text = div.innerText
     if (text) parts.push(text)
-    navigator.clipboard.writeText(parts.join("\n\n")).then(() => {
+    return navigator.clipboard.writeText(parts.join("\n\n")).then(() => {
       toast.success(t("general:Successfully copied"))
+    }).catch(() => {
+      toast.error(t("general:Failed to copy to clipboard"))
     })
   }
 

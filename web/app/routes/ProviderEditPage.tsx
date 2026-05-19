@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router"
-import { CopyIcon, DownloadIcon, LinkIcon, Loader2Icon, Volume2Icon } from "lucide-react"
+import { CheckIcon, CopyIcon, DownloadIcon, LinkIcon, Loader2Icon, Volume2Icon } from "lucide-react"
 import { toast } from "sonner"
 import i18next from "i18next"
 import "~/i18n"
@@ -261,6 +261,8 @@ function CopyDownloadTextarea({
   onChange: (v: string) => void
   filename: string
 }) {
+  const [copied, setCopied] = useState(false)
+
   function download() {
     const blob = new Blob([value ?? ""], { type: "text/plain;charset=utf-8" })
     const url = URL.createObjectURL(blob)
@@ -280,11 +282,16 @@ function CopyDownloadTextarea({
           size="sm"
           disabled={!value}
           onClick={() => {
-            navigator.clipboard.writeText(value ?? "")
-            toast.success(i18next.t("general:Copied to clipboard successfully"))
+            navigator.clipboard.writeText(value ?? "").then(() => {
+              toast.success(i18next.t("general:Copied to clipboard successfully"))
+              setCopied(true)
+              setTimeout(() => setCopied(false), 2000)
+            }).catch(() => {
+              toast.error(i18next.t("general:Failed to copy to clipboard"))
+            })
           }}
         >
-          <CopyIcon className="h-4 w-4" />
+          {copied ? <CheckIcon className="h-4 w-4 text-green-500" /> : <CopyIcon className="h-4 w-4" />}
           {i18next.t("general:Copy")}
         </Button>
         <Button type="button" variant="outline" size="sm" disabled={!value} onClick={download}>
