@@ -33,7 +33,7 @@ var (
 )
 
 func init() {
-	reI18nFrontend, _ = regexp.Compile("i18next.t\\(\"(.*?)\"\\)")
+	reI18nFrontend, _ = regexp.Compile(`\bt\("([^"]+:[^"]+)"\)`)
 	reI18nBackendObject, _ = regexp.Compile("i18n.Translate\\((.*?)\"\\)")
 	reI18nBackendController, _ = regexp.Compile("c.T\\((.*?)\"\\)")
 }
@@ -108,7 +108,7 @@ func parseAllWords(category string) *I18nData {
 	if category == "backend" {
 		paths = getAllFilePathsInFolder("../", ".go")
 	} else {
-		paths = getAllFilePathsInFolder("../web/src", ".js")
+		paths = append(getAllFilePathsInFolder("../web/app", ".ts"), getAllFilePathsInFolder("../web/app", ".tsx")...)
 	}
 
 	allWords := []string{}

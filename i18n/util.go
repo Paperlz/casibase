@@ -31,7 +31,7 @@ func getI18nFilePath(category string, language string) string {
 	if category == "backend" {
 		return fmt.Sprintf("../i18n/locales/%s/data.json", language)
 	} else {
-		return fmt.Sprintf("../web/src/locales/%s/data.json", language)
+		return fmt.Sprintf("../web/app/locales/%s/data.json", language)
 	}
 }
 
