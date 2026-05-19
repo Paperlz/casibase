@@ -20,6 +20,7 @@ import {
   ZapIcon,
 } from "lucide-react"
 import { getBuiltInSite } from "~/backend/SiteBackend"
+import { useSite } from "~/context/SiteContext"
 
 interface QuickLink {
   title: string
@@ -39,6 +40,7 @@ export function meta() {
 
 export default function HomePage() {
   const { t } = useTranslation()
+  const { site } = useSite()
   const [welcomeTitle, setWelcomeTitle] = useState<string>(t("home:Welcome to OpenAgent"))
   const [welcomeText, setWelcomeText] = useState<string>(t("home:Welcome subtitle"))
 
@@ -51,7 +53,14 @@ export default function HomePage() {
     })
   }, [])
 
-  const sections: Section[] = [
+  const navItems = site?.navItems
+  function isNavKeyVisible(key: string): boolean {
+    if (!navItems || navItems.length === 0) return true
+    if (navItems.includes("all")) return true
+    return navItems.includes(key)
+  }
+
+  const allSections: Section[] = [
     {
       label: t("general:Knowledge Base"),
       items: [
@@ -151,6 +160,13 @@ export default function HomePage() {
       ],
     },
   ]
+
+  const sections = allSections
+    .map(section => ({
+      ...section,
+      items: section.items.filter(item => isNavKeyVisible(item.href)),
+    }))
+    .filter(section => section.items.length > 0)
 
   return (
     <div className="min-h-full">

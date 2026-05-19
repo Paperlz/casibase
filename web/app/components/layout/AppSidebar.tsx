@@ -59,6 +59,8 @@ type NavItem = {
   external?: boolean
   /** If set, URL is built from the Casdoor issuer: `${issuer}${casdoorPath}` */
   casdoorPath?: string
+  /** NavItemTree key when it differs from url (e.g. "/sites" for the Sites admin page) */
+  navKey?: string
 }
 
 type NavGroup = {
@@ -146,12 +148,12 @@ const navGroups: NavGroup[] = [
     icon: SettingsIcon,
     key: "admin",
     items: [
-      { title: "Sites", url: "/sites/admin/site-built-in", icon: LayoutIcon },
+      { title: "Sites", url: "/sites/admin/site-built-in", icon: LayoutIcon, navKey: "/sites" },
       { title: "Resources", url: "/resources", icon: InboxIcon },
       { title: "Usages", url: "/usages", icon: LineChartIcon },
       { title: "Visitors", url: "/visitors", icon: BarChart2Icon },
       { title: "System Info", url: "/sysinfo", icon: MonitorIcon },
-      { title: "Swagger", url: `${ServerUrl}/swagger/index.html`, icon: CodeIcon, external: true },
+      { title: "Swagger", url: `${ServerUrl}/swagger/index.html`, icon: CodeIcon, external: true, navKey: "/swagger" },
     ],
   },
 ]
@@ -275,15 +277,38 @@ export function AppSidebar({
   const casdoorAvailable = isCasdoorAvailable()
   const casdoorIssuer = getAuthConfig().issuer
 
-  // Filter nav groups based on user role
+  const { site } = useSite()
+  const navItems = site?.navItems
+
+  function isNavKeyVisible(key: string): boolean {
+    if (!navItems || navItems.length === 0) return true
+    if (navItems.includes("all")) return true
+    return navItems.includes(key)
+  }
+
+  const visibleNavTop = React.useMemo(() =>
+    navTop.filter(item => item.url !== "/chat" || isNavKeyVisible("/chat")),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [navItems]
+  )
+
   const visibleGroups = React.useMemo(() => {
-    if (!account) return navGroups
-    // Chat-admin users only see a subset
-    if (isChatAdminUser(account) && !isAdminUser(account)) {
-      return navGroups.filter(g => !["multimedia", "logs"].includes(g.key))
+    // Filter items within each group, then filter empty groups
+    let groups = navGroups
+      .map(group => ({
+        ...group,
+        items: group.items.filter(item => isNavKeyVisible(item.navKey ?? item.url)),
+      }))
+      .filter(group => isNavKeyVisible("/" + group.key) || group.items.length > 0)
+
+    // Role-based filtering
+    if (account && isChatAdminUser(account) && !isAdminUser(account)) {
+      groups = groups.filter(g => !["multimedia", "logs"].includes(g.key))
     }
-    return navGroups
-  }, [account])
+
+    return groups
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account, navItems])
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -301,7 +326,7 @@ export function AppSidebar({
         {/* Top-level nav items */}
         <SidebarGroup className="pb-0">
           <SidebarMenu>
-            {navTop.map((item) => {
+            {visibleNavTop.map((item) => {
               const Icon = item.icon
               const isActive = item.url === "/" ? location.pathname === "/" || location.pathname === "/home" : location.pathname.startsWith(item.url)
               return (
