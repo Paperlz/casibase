@@ -42,6 +42,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover"
 import { ServerUrl, getAcceptLanguage } from "~/lib/api"
 
 // ── FormField ─────────────────────────────────────────────────────────────────
@@ -171,17 +176,6 @@ export function TagInput({
 }) {
   const [inputVal, setInputVal] = useState("")
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
 
   function add(v: string) {
     const trimmed = v.trim()
@@ -201,8 +195,11 @@ export function TagInput({
   )
 
   return (
-    <div ref={ref} className="relative">
-      <div className="flex min-h-8 flex-wrap items-center gap-1 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+    <Popover open={open && filtered.length > 0} onOpenChange={setOpen}>
+      <PopoverTrigger
+        className="flex min-h-8 w-full flex-wrap items-center gap-1 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
+        onClick={() => setOpen(true)}
+      >
         {value.map((v) => (
           <span
             key={v}
@@ -219,7 +216,7 @@ export function TagInput({
           </span>
         ))}
         <input
-          className="min-w-16 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+          className="min-w-16 flex-1 bg-transparent text-left outline-none placeholder:text-muted-foreground"
           value={inputVal}
           placeholder={value.length === 0 ? placeholder : ""}
           onChange={(e) => {
@@ -237,22 +234,25 @@ export function TagInput({
           }}
           onFocus={() => setOpen(true)}
         />
-      </div>
-      {open && filtered.length > 0 && (
-        <div className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-border bg-popover p-1 shadow-md">
-          {filtered.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className="w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-              onClick={() => add(s)}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        collisionAvoidance={{ side: "none", align: "shift", fallbackAxisSide: "none" }}
+        className="max-h-48 w-(--anchor-width) gap-0 overflow-y-auto p-1"
+      >
+        {filtered.map((s) => (
+          <button
+            key={s}
+            type="button"
+            className="w-full shrink-0 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+            onClick={() => add(s)}
+          >
+            {s}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -270,17 +270,6 @@ export function MultiSelect({
   placeholder?: string
 }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
 
   function toggle(v: string) {
     if (value.includes(v)) {
@@ -291,11 +280,10 @@ export function MultiSelect({
   }
 
   return (
-    <div ref={ref} className="relative">
-      <button
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
         type="button"
         className="flex min-h-8 w-full flex-wrap items-center gap-1 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        onClick={() => setOpen((o) => !o)}
       >
         {value.length === 0 ? (
           <span className="text-muted-foreground">{placeholder}</span>
@@ -323,30 +311,33 @@ export function MultiSelect({
           })
         )}
         <ChevronDownIcon className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-border bg-popover p-1 shadow-md">
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-              onClick={() => toggle(opt.value)}
-            >
-              <span className="flex h-4 w-4 items-center justify-center">
-                {value.includes(opt.value) && <CheckIcon className="h-3.5 w-3.5" />}
-              </span>
-              {opt.label}
-            </button>
-          ))}
-          {options.length === 0 && (
-            <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-              {i18next.t("general:No data")}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        collisionAvoidance={{ side: "none", align: "shift", fallbackAxisSide: "none" }}
+        className="max-h-60 w-(--anchor-width) gap-0 overflow-y-auto p-1"
+      >
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            className="flex w-full shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+            onClick={() => toggle(opt.value)}
+          >
+            <span className="flex h-4 w-4 items-center justify-center">
+              {value.includes(opt.value) && <CheckIcon className="h-3.5 w-3.5" />}
+            </span>
+            {opt.label}
+          </button>
+        ))}
+        {options.length === 0 && (
+          <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+            {i18next.t("general:No data")}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   )
 }
 
