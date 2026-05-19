@@ -71,6 +71,8 @@ export default function ChatPage() {
   const inputStore = useRef(new Map<string | undefined, string>())
   const streamOwnerRef = useRef("")
   const streamNameRef = useRef("")
+  const chatsLoadedRef = useRef(false)
+  const latestMessageChatRef = useRef("")
 
   const streamAnswer = useMessageStream(setMessages, setMessageLoading, setMessageError)
   const { handleMessageLike, copyMessageText } = useChatMessageHandlers(setMessages)
@@ -113,7 +115,9 @@ export default function ChatPage() {
   const loadMessages = useCallback(
     (targetChat: Chat) => {
       setMessageError(false)
+      latestMessageChatRef.current = targetChat.name
       getChatMessages("admin", targetChat.name).then((res) => {
+        if (latestMessageChatRef.current !== targetChat.name) return
         if (res.status !== "ok") return
         const msgs: Message[] = res.data || []
 
@@ -188,22 +192,26 @@ export default function ChatPage() {
 
   const fetchChats = useCallback(() => {
     if (!account?.name) return
-    setLoading(true)
+    const shouldShowPageLoading = !chatsLoadedRef.current
+    if (shouldShowPageLoading) setLoading(true)
 
     const storeName = storeNameParam || ""
     getChats(account.name, storeName, -1, -1, "user", account.name).then((res) => {
       if (res.status !== "ok") {
+        chatsLoadedRef.current = true
         setLoading(false)
         return
       }
 
       const fetchedChats: Chat[] = res.data || []
       setChats(fetchedChats)
+      chatsLoadedRef.current = true
       setLoading(false)
-      setMessages([])
 
       if (!chatNameParam) {
+        latestMessageChatRef.current = ""
         setChat(undefined)
+        setMessages([])
         setDraftStoreName(storeNameParam)
         menuRef.current?.clearSelectedKey()
         fetchStores()
@@ -212,7 +220,9 @@ export default function ChatPage() {
 
       const targetChat = fetchedChats.find((c) => c.name === chatNameParam)
       if (!targetChat) {
+        latestMessageChatRef.current = ""
         setChat(undefined)
+        setMessages([])
         setDraftStoreName(storeNameParam)
         menuRef.current?.clearSelectedKey()
         navigate(generateChatUrl(undefined, storeNameParam), { replace: true })
@@ -363,6 +373,7 @@ export default function ChatPage() {
 
   function handleAddChat(store?: Store) {
     const sName = store?.name || storeNameParam || ""
+    latestMessageChatRef.current = ""
     setChat(undefined)
     setMessages([])
     setMessageError(false)
@@ -387,6 +398,7 @@ export default function ChatPage() {
       setChats(newChats)
 
       if (newChats.length === 0) {
+        latestMessageChatRef.current = ""
         setChat(undefined)
         setMessages([])
         navigate("/chat", { replace: true })
