@@ -26,18 +26,6 @@ import (
 	"xorm.io/core"
 )
 
-type TreeFile struct {
-	Key         string      `xorm:"varchar(100)" json:"key"`
-	Title       string      `xorm:"varchar(100)" json:"title"`
-	Size        int64       `json:"size"`
-	CreatedTime string      `xorm:"varchar(100)" json:"createdTime"`
-	IsLeaf      bool        `json:"isLeaf"`
-	Url         string      `xorm:"varchar(255)" json:"url"`
-	Children    []*TreeFile `xorm:"varchar(1000)" json:"children"`
-
-	ChildrenMap map[string]*TreeFile `xorm:"-" json:"-"`
-}
-
 type Properties struct {
 	CollectedTime string `xorm:"varchar(100)" json:"collectedTime"`
 	Subject       string `xorm:"varchar(100)" json:"subject"`
@@ -105,7 +93,6 @@ type Store struct {
 	MessageCount int `xorm:"-" json:"messageCount"`
 	VectorCount  int `xorm:"-" json:"vectorCount"`
 
-	FileTree      *TreeFile              `xorm:"mediumtext" json:"fileTree"`
 	PropertiesMap map[string]*Properties `xorm:"mediumtext" json:"propertiesMap"`
 }
 

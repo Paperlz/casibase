@@ -20,7 +20,6 @@ import (
 	"github.com/the-open-agent/openagent/conf"
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/object"
-	"github.com/the-open-agent/openagent/util"
 )
 
 func addRecord(c *ApiController, userName string, requestUri string, lang string) error {
@@ -37,26 +36,5 @@ func addRecord(c *ApiController, userName string, requestUri string, lang string
 	record.Organization = conf.GetConfigString("casdoorOrganization")
 
 	_, _, err = object.AddRecord(record, c.GetAcceptLanguage())
-	return err
-}
-
-func addRecordForFile(c *ApiController, userName string, action string, sessionId string, key string, filename string, isLeaf bool, lang string) error {
-	typ := "Folder"
-	if isLeaf {
-		typ = "File"
-	}
-
-	_, storeName, err := util.GetOwnerAndNameFromIdWithError(sessionId)
-	if err != nil {
-		return err
-	}
-
-	path := fmt.Sprintf("/%s/%s", key, filename)
-	if filename == "" {
-		path = key
-	}
-
-	text := fmt.Sprintf("%s%s, Session: %s, Path: %s", action, typ, storeName, path)
-	err = addRecord(c, userName, text, lang)
 	return err
 }

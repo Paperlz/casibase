@@ -187,6 +187,38 @@ func (c *ApiController) DeleteFile() {
 	c.ResponseOk(success)
 }
 
+// UploadFile
+// @Title UploadFile
+// @Tag File API
+// @Description upload a file to a store and create a File record
+// @Param store query string true "The id (owner/name) of the store"
+// @Param file formData file true "The file to upload"
+// @Success 200 {object} controllers.Response The Response object
+// @router /upload-file [post]
+func (c *ApiController) UploadFile() {
+	userName, ok := c.RequireSignedIn()
+	if !ok {
+		return
+	}
+
+	storeId := c.Input().Get("store")
+
+	file, header, err := c.GetFile("file")
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	defer file.Close()
+
+	res, err := object.UploadFileToStore(storeId, userName, header.Filename, file, c.GetAcceptLanguage())
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(res)
+}
+
 // RefreshFileVectors
 // @Title RefreshFileVectors
 // @Tag File API

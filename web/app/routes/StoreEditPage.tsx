@@ -169,7 +169,7 @@ export default function StoreEditPage() {
   async function save(exit: boolean) {
     if (!store || !owner || !storeName) return
     setSaving(true)
-    const payload = { ...store, fileTree: undefined }
+    const payload = { ...store }
     try {
       const res = await updateStore(owner, storeName, payload)
       if (res.status === "ok") {

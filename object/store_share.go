@@ -116,7 +116,6 @@ func ShareStore(srcOwner, srcName, targetUserName, sharedByUserName string) (*St
 	newStore.Name = newName
 	newStore.SharedBy = sharedByUserName
 	newStore.IsDefault = false
-	newStore.FileTree = nil
 	newStore.ChatCount = 0
 	newStore.MessageCount = 0
 	newStore.VectorCount = 0

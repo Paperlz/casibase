@@ -382,19 +382,34 @@ func (c *ApiController) GetAccount() {
 
 	claims := c.GetSessionClaims()
 
-	// Fetch fresh user data from Casdoor in real-time for non-anonymous users
-	if claims.User.Type != "anonymous-user" && claims.User.Owner != object.UserOwner {
-		user, err := auth.GetUser(claims.User.Name)
-		if err != nil {
-			c.ResponseError(err.Error())
-			return
-		}
-
-		if user != nil {
-			// Update the session with fresh user data from Casdoor
-			// Only update the User field, preserving all other claims fields (AccessToken, Type, IsAdmin, etc.)
-			claims.User = *user
-			c.SetSessionClaims(claims)
+	if claims.User.Type != "anonymous-user" {
+		if claims.User.Owner == object.UserOwner {
+			// Fetch fresh user data from local DB for local (non-Casdoor) users
+			localUser, err := object.GetUserByRuntimeName(claims.User.Name)
+			if err != nil {
+				c.ResponseError(err.Error())
+				return
+			}
+			if localUser != nil {
+				freshUser := localUser.ToCasdoorUser()
+				// Preserve session-only fields not stored in local DB
+				freshUser.Type = claims.User.Type
+				freshUser.IsAdmin = claims.User.IsAdmin
+				claims.User = freshUser
+				c.SetSessionClaims(claims)
+			}
+		} else {
+			// Fetch fresh user data from Casdoor in real-time
+			user, err := auth.GetUser(claims.User.Name)
+			if err != nil {
+				c.ResponseError(err.Error())
+				return
+			}
+			if user != nil {
+				// Only update the User field, preserving all other claims fields (AccessToken, Type, IsAdmin, etc.)
+				claims.User = *user
+				c.SetSessionClaims(claims)
+			}
 		}
 	}
 

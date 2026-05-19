@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router"
 import {
   EditIcon,
@@ -21,12 +21,13 @@ import {
   RefreshCwIcon,
   SearchIcon,
   Trash2Icon,
+  UploadIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import i18next from "i18next"
 import "~/i18n"
 
-import { type File as FileItem, deleteFile, getFiles, refreshFileVectors } from "~/backend/FileBackend"
+import { type File as FileItem, deleteFile, getFiles, refreshFileVectors, uploadFile } from "~/backend/FileBackend"
 import { isLocalAdminUser } from "~/backend/AccountBackend"
 import { useAccount } from "~/context/AccountContext"
 import { Button } from "~/components/ui/button"
@@ -99,6 +100,9 @@ export default function FileListPage() {
   const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [refreshing, setRefreshing] = useState<Record<string, boolean>>({})
+  const [uploading, setUploading] = useState(false)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchFiles()
@@ -189,8 +193,22 @@ export default function FileListPage() {
       .finally(() => setRefreshing((prev) => ({ ...prev, [file.name]: false })))
   }
 
-  function handleAdd() {
-    navigate("/stores/admin/store-built-in")
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ""
+    setUploading(true)
+    uploadFile("admin/store-built-in", file)
+      .then((res) => {
+        if (res.status === "ok") {
+          toast.success(i18next.t("general:Successfully uploaded"))
+          fetchFiles()
+        } else {
+          toast.error(res.msg)
+        }
+      })
+      .catch((err: Error) => toast.error(err.message))
+      .finally(() => setUploading(false))
   }
 
   function toggleSelect(name: string) {
@@ -230,6 +248,15 @@ export default function FileListPage() {
 
   return (
     <div className="flex flex-col gap-4 p-6">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        accept=".txt,.md,.yaml,.csv,.pdf,.docx,.xlsx,.pptx"
+        onChange={handleFileChange}
+      />
+
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -261,8 +288,17 @@ export default function FileListPage() {
               onKeyDown={(e) => { if (e.key === "Enter") handleSearch() }}
             />
           </div>
-          <Button size="sm" onClick={handleAdd}>
-            {i18next.t("general:Add")}
+          <Button
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <Loader2Icon className="h-4 w-4 animate-spin" />
+            ) : (
+              <UploadIcon className="h-4 w-4" />
+            )}
+            {i18next.t("general:Upload")}
           </Button>
           {selectedNames.size > 0 && (
             <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>

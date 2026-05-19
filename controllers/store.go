@@ -144,16 +144,6 @@ func (c *ApiController) GetStore() {
 		return
 	}
 
-	if store != nil {
-		host := c.Ctx.Request.Host
-		origin := getOriginFromHost(host)
-		err = store.Populate(origin, c.GetAcceptLanguage())
-		if err != nil {
-			c.ResponseOk(store, err.Error())
-			return
-		}
-	}
-
 	c.ResponseOk(store)
 }
 

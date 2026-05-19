@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { apiFetch, apiPost } from "~/lib/api"
+import { apiFetch, apiPost, ServerUrl, getAcceptLanguage } from "~/lib/api"
 
 export type File = {
   owner: string
@@ -49,4 +49,24 @@ export function deleteFile(file: File): Promise<any> {
 
 export function refreshFileVectors(file: File): Promise<any> {
   return apiPost("/api/refresh-file-vectors", file)
+}
+
+export function uploadFile(storeId: string, file: globalThis.File): Promise<any> {
+  const formData = new FormData()
+  formData.append("file", file)
+  return fetch(`${ServerUrl}/api/upload-file?store=${encodeURIComponent(storeId)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": getAcceptLanguage(),
+    },
+    body: formData,
+  }).then(async (res) => {
+    const text = await res.text()
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { status: "error", msg: text }
+    }
+  })
 }

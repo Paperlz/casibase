@@ -15,9 +15,13 @@
 package object
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"strings"
 
+	"github.com/beego/beego/logs"
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
@@ -165,6 +169,60 @@ func DeleteFile(file *File, lang string) (bool, error) {
 
 func (file *File) GetId() string {
 	return fmt.Sprintf("%s/%s", file.Owner, file.Name)
+}
+
+func UploadFileToStore(storeId string, userName string, filename string, fileData multipart.File, lang string) (bool, error) {
+	store, err := GetStore(storeId)
+	if err != nil {
+		return false, err
+	}
+	if store == nil {
+		return false, nil
+	}
+
+	storageProviderObj, err := store.GetStorageProviderObj(lang)
+	if err != nil {
+		return false, err
+	}
+
+	fileBuffer := bytes.NewBuffer(nil)
+	_, err = io.Copy(fileBuffer, fileData)
+	if err != nil {
+		return false, err
+	}
+
+	bs := fileBuffer.Bytes()
+	objectKey := filename
+	fileUrl, err := storageProviderObj.PutObject(userName, store.Name, objectKey, fileBuffer)
+	if err != nil {
+		return false, err
+	}
+
+	fileRecord := &File{
+		Owner:           store.Owner,
+		Name:            getFileName(store.Name, objectKey),
+		CreatedTime:     util.GetCurrentTime(),
+		Filename:        filename,
+		Size:            int64(len(bs)),
+		Store:           store.Name,
+		StorageProvider: store.StorageProvider,
+		Url:             fileUrl,
+		TokenCount:      0,
+		Status:          FileStatusPending,
+	}
+	_, err = AddFile(fileRecord)
+	if err != nil {
+		return false, err
+	}
+
+	go func() {
+		_, vectorErr := AddVectorsForFile(store, objectKey, fileUrl, lang)
+		if vectorErr != nil {
+			logs.Error("Failed to generate vectors for file %s: %v", objectKey, vectorErr)
+		}
+	}()
+
+	return true, nil
 }
 
 func getFileName(storeName string, objectKey string) string {
