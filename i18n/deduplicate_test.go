@@ -101,7 +101,7 @@ func findDuplicateKeysInJSON(filePath string) ([]DuplicateInfo, error) {
 
 // TestDeduplicateFrontendI18n checks for duplicate i18n keys in the frontend en.json file
 func TestDeduplicateFrontendI18n(t *testing.T) {
-	filePath := "../web/src/locales/en/data.json"
+	filePath := "../web/app/locales/en/data.json"
 
 	// Find duplicate keys
 	duplicates, err := findDuplicateKeysInJSON(filePath)
