@@ -71,8 +71,6 @@ export default function ChatPage() {
   const inputStore = useRef(new Map<string | undefined, string>())
   const streamOwnerRef = useRef("")
   const streamNameRef = useRef("")
-  const inputValueRef = useRef(inputValue)
-  inputValueRef.current = inputValue
 
   const streamAnswer = useMessageStream(setMessages, setMessageLoading, setMessageError)
   const { handleMessageLike, copyMessageText } = useChatMessageHandlers(setMessages)
@@ -138,6 +136,10 @@ export default function ChatPage() {
               userTextForTitle: getFirstUserMessageText(msgs),
               onTitle: updateChatDisplayName,
               onChat: (update) => applyChatUpdateFromServer(update, targetChat),
+              onDone: () => {
+                streamOwnerRef.current = ""
+                streamNameRef.current = ""
+              },
             })
           } else {
             setMessageLoading(false)
@@ -229,7 +231,12 @@ export default function ChatPage() {
     fetchChats()
   }, [fetchChats])
 
-  // Clean up stream and save/restore input when chat changes
+  // Keep inputStore in sync with current input so cleanup doesn't need a stale-closure workaround
+  useEffect(() => {
+    inputStore.current.set(chat?.name, inputValue)
+  }, [inputValue, chat?.name])
+
+  // Close the active SSE stream when the chat changes
   useEffect(() => {
     return () => {
       if (streamOwnerRef.current) {
@@ -237,7 +244,6 @@ export default function ChatPage() {
         streamOwnerRef.current = ""
         streamNameRef.current = ""
       }
-      inputStore.current.set(chat?.name, inputValueRef.current)
     }
   }, [chat?.name])
 
@@ -331,6 +337,8 @@ export default function ChatPage() {
     const lastMsg = messages[messages.length - 1]
     if (lastMsg.author === "AI" && messageLoading) {
       closeMessageEventSource(lastMsg.owner, lastMsg.name)
+      streamOwnerRef.current = ""
+      streamNameRef.current = ""
       updateMessage(lastMsg.owner, lastMsg.name, lastMsg).then((res) => {
         if (res.status === "ok") setMessageLoading(false)
       })
@@ -340,8 +348,6 @@ export default function ChatPage() {
   function handleSelectChat(index: number) {
     const selected = chats[index]
     if (!selected) return
-    // Save current input
-    inputStore.current.set(chat?.name, inputValue)
     setChat(selected)
     setDraftStoreName(selected.store)
     setMessageError(false)
@@ -356,7 +362,6 @@ export default function ChatPage() {
   }
 
   function handleAddChat(store?: Store) {
-    inputStore.current.set(chat?.name, inputValue)
     const sName = store?.name || storeNameParam || ""
     setChat(undefined)
     setMessages([])
