@@ -1,7 +1,7 @@
 FROM --platform=$BUILDPLATFORM node:22 AS front
 WORKDIR /web
 COPY ./web .
-RUN yarn install --frozen-lockfile --network-timeout 1000000 && yarn run build
+RUN npm ci && npm run build
 
 
 FROM --platform=$BUILDPLATFORM golang:1.25 AS back
