@@ -1,9 +1,10 @@
 import * as React from "react"
 import { Link, useLocation, useNavigate } from "react-router"
 import { useTranslation } from "react-i18next"
-import { GlobeIcon, LogOutIcon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react"
+import { LogOutIcon, MoonIcon, SettingsIcon, SunIcon } from "lucide-react"
 import { isBasicLoginMode, type Account } from "~/backend/AccountBackend"
 import { getLanguage, setLanguage } from "~/i18n"
+import { StaticBaseUrl } from "~/lib/ProviderLogos"
 import { isCasdoorAvailable, getMyProfileUrl } from "~/lib/AuthConfig"
 
 import {
@@ -80,9 +81,21 @@ type AppHeaderProps = {
   onSignOut?: () => void
 }
 
-const LANGUAGE_LABELS: Record<string, string> = {
-  en: "English",
-  zh: "中文",
+const LANGUAGE_OPTIONS: Record<string, { country: string; label: string }> = {
+  en: { country: "US", label: "English" },
+  zh: { country: "CN", label: "中文" },
+}
+
+function FlagIcon({ country, alt }: { country: string; alt: string }) {
+  return (
+    <img
+      width={20}
+      height={15}
+      alt={alt}
+      src={`${StaticBaseUrl}/flag-icons/${country}.svg`}
+      className="inline-block object-cover"
+    />
+  )
 }
 
 function useHoverDropdown() {
@@ -161,13 +174,17 @@ export function AppHeader({ account, onSignOut }: AppHeaderProps) {
         <div onMouseEnter={langDropdown.onMouseEnter} onMouseLeave={langDropdown.onMouseLeave}>
           <DropdownMenu open={langDropdown.open} onOpenChange={langDropdown.setOpen}>
             <DropdownMenuTrigger
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              className="flex h-8 items-center justify-center rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               aria-label="Switch language"
             >
-              <GlobeIcon className="h-4 w-4" />
+              {LANGUAGE_OPTIONS[language] ? (
+                <FlagIcon country={LANGUAGE_OPTIONS[language].country} alt={LANGUAGE_OPTIONS[language].label} />
+              ) : (
+                <span className="text-base">🌐</span>
+              )}
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-32">
-              {Object.entries(LANGUAGE_LABELS).map(([key, label]) => (
+            <DropdownMenuContent align="end" className="w-36">
+              {Object.entries(LANGUAGE_OPTIONS).map(([key, { country, label }]) => (
                 <DropdownMenuItem
                   key={key}
                   onClick={() => {
@@ -176,6 +193,7 @@ export function AppHeader({ account, onSignOut }: AppHeaderProps) {
                   }}
                   className={language === key ? "font-medium text-primary" : ""}
                 >
+                  <FlagIcon country={country} alt={label} />
                   {label}
                 </DropdownMenuItem>
               ))}
