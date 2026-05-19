@@ -49,7 +49,7 @@ export function meta() {
 const CATEGORIES = ["Storage", "Model", "Embedding", "Blockchain", "Video", "Text-to-Speech", "Speech-to-Text"]
 const CURRENCIES = ["USD", "CNY", "EUR", "JPY", "GBP", "AUD", "CAD", "CHF", "HKD", "SGD"]
 const MODEL_DEFAULTS: Record<string, string> = {
-  "OpenAI Compatible": "gpt-image-2",
+  "OpenAI Compatible": "",
   OpenAI: "gpt-4",
   Gemini: "gemini-pro",
   "OpenRouter": "openai/gpt-4",
@@ -584,7 +584,7 @@ export default function ProviderEditPage() {
         </FormField>
         {showSubType && (
           <FormField label={i18next.t("provider:Sub type")} tooltip={i18next.t("provider:Sub type - Tooltip")}>
-            {provider.type === "Ollama" ? (
+            {provider.type === "Ollama" || provider.type === "OpenAI Compatible" ? (
               <DataListInput value={provider.subType} options={subtypeOptions} onChange={(v) => update("subType", v)} disabled={disabled} placeholder="Please select or enter the model name" />
             ) : (
               <SelectField value={provider.subType} options={subtypeOptions} onChange={(v) => update("subType", v)} disabled={disabled} />
