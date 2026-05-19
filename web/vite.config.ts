@@ -28,6 +28,9 @@ function flattenClientBuild() {
 
 export default defineConfig({
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths(), flattenClientBuild()],
+  server: {
+    port: 13001,
+  },
   build: {
     assetsDir: "static",
   },
