@@ -1,4 +1,5 @@
 import { Link } from "react-router"
+import { useTranslation } from "react-i18next"
 import {
   BotIcon,
   DatabaseIcon,
@@ -25,151 +26,151 @@ interface QuickLink {
   color: string
 }
 
-const sections: { label: string; items: QuickLink[] }[] = [
-  {
-    label: "Get Started",
-    items: [
-      {
-        title: "Chat",
-        description: "Start a conversation with your AI assistant",
-        href: "/chat",
-        icon: MessageCircleIcon,
-        color: "bg-primary/10 text-primary",
-      },
-      {
-        title: "Quick Setup",
-        description: "Configure your AI platform in minutes",
-        href: "/quick-setup",
-        icon: RocketIcon,
-        color: "bg-primary/10 text-primary",
-      },
-    ],
-  },
-  {
-    label: "Knowledge Base",
-    items: [
-      {
-        title: "Stores",
-        description: "Manage your AI agent knowledge stores",
-        href: "/stores",
-        icon: LayoutGridIcon,
-        color: "bg-primary/10 text-primary",
-      },
-      {
-        title: "Files",
-        description: "Upload and manage knowledge files",
-        href: "/files",
-        icon: DatabaseIcon,
-        color: "bg-primary/10 text-primary",
-      },
-      {
-        title: "Vectors",
-        description: "Manage vector embeddings and semantic search",
-        href: "/vectors",
-        icon: NetworkIcon,
-        color: "bg-primary/10 text-primary",
-      },
-    ],
-  },
-  {
-    label: "Connectors",
-    items: [
-      {
-        title: "Providers",
-        description: "Connect and configure AI model providers",
-        href: "/providers",
-        icon: PlugIcon,
-        color: "bg-primary/10 text-primary",
-      },
-      {
-        title: "Pipes",
-        description: "Build and manage agent pipelines",
-        href: "/pipes",
-        icon: GitBranchIcon,
-        color: "bg-primary/10 text-primary",
-      },
-      {
-        title: "Skills",
-        description: "Define reusable AI agent skills",
-        href: "/skills",
-        icon: SparklesIcon,
-        color: "bg-primary/10 text-primary",
-      },
-      {
-        title: "Tools",
-        description: "Configure tools your agents can use",
-        href: "/tools",
-        icon: WrenchIcon,
-        color: "bg-primary/10 text-primary",
-      },
-      {
-        title: "MCP Servers",
-        description: "Connect Model Context Protocol servers",
-        href: "/servers",
-        icon: ServerIcon,
-        color: "bg-primary/10 text-primary",
-      },
-    ],
-  },
-  {
-    label: "Automation",
-    items: [
-      {
-        title: "Tasks",
-        description: "Manage and monitor background agent tasks",
-        href: "/tasks",
-        icon: BotIcon,
-        color: "bg-primary/10 text-primary",
-      },
-      {
-        title: "Scales",
-        description: "Scale your agent workloads efficiently",
-        href: "/scales",
-        icon: ZapIcon,
-        color: "bg-primary/10 text-primary",
-      },
-    ],
-  },
-  {
-    label: "Monitoring",
-    items: [
-      {
-        title: "Audit Logs",
-        description: "Track and review all agent activity",
-        href: "/records",
-        icon: FileTextIcon,
-        color: "bg-primary/10 text-primary",
-      },
-      {
-        title: "Sessions",
-        description: "View active and historical agent sessions",
-        href: "/sessions",
-        icon: ShieldCheckIcon,
-        color: "bg-primary/10 text-primary",
-      },
-      {
-        title: "API Keys",
-        description: "Manage access credentials and API keys",
-        href: "/usages",
-        icon: KeyRoundIcon,
-        color: "bg-primary/10 text-primary",
-      },
-    ],
-  },
-]
-
 export function meta() {
   return [{ title: "OpenAgent" }]
 }
 
 export default function HomePage() {
+  const { t } = useTranslation()
+
+  const sections: { label: string; items: QuickLink[] }[] = [
+    {
+      label: t("home:Get Started"),
+      items: [
+        {
+          title: t("general:Chat"),
+          description: t("home:Start a conversation with your AI assistant"),
+          href: "/chat",
+          icon: MessageCircleIcon,
+          color: "bg-primary/10 text-primary",
+        },
+        {
+          title: t("general:Quick Setup"),
+          description: t("home:Configure your AI platform in minutes"),
+          href: "/quick-setup",
+          icon: RocketIcon,
+          color: "bg-primary/10 text-primary",
+        },
+      ],
+    },
+    {
+      label: t("general:Knowledge Base"),
+      items: [
+        {
+          title: t("general:Stores"),
+          description: t("home:Manage your AI agent knowledge stores"),
+          href: "/stores",
+          icon: LayoutGridIcon,
+          color: "bg-primary/10 text-primary",
+        },
+        {
+          title: t("general:Files"),
+          description: t("home:Upload and manage knowledge files"),
+          href: "/files",
+          icon: DatabaseIcon,
+          color: "bg-primary/10 text-primary",
+        },
+        {
+          title: t("general:Vectors"),
+          description: t("home:Manage vector embeddings and semantic search"),
+          href: "/vectors",
+          icon: NetworkIcon,
+          color: "bg-primary/10 text-primary",
+        },
+      ],
+    },
+    {
+      label: t("general:Connectors"),
+      items: [
+        {
+          title: t("general:Providers"),
+          description: t("home:Connect and configure AI model providers"),
+          href: "/providers",
+          icon: PlugIcon,
+          color: "bg-primary/10 text-primary",
+        },
+        {
+          title: t("general:Pipes"),
+          description: t("home:Build and manage agent pipelines"),
+          href: "/pipes",
+          icon: GitBranchIcon,
+          color: "bg-primary/10 text-primary",
+        },
+        {
+          title: t("general:Skills"),
+          description: t("home:Define reusable AI agent skills"),
+          href: "/skills",
+          icon: SparklesIcon,
+          color: "bg-primary/10 text-primary",
+        },
+        {
+          title: t("general:Tools"),
+          description: t("home:Configure tools your agents can use"),
+          href: "/tools",
+          icon: WrenchIcon,
+          color: "bg-primary/10 text-primary",
+        },
+        {
+          title: t("general:MCP Servers"),
+          description: t("home:Connect Model Context Protocol servers"),
+          href: "/servers",
+          icon: ServerIcon,
+          color: "bg-primary/10 text-primary",
+        },
+      ],
+    },
+    {
+      label: t("home:Automation"),
+      items: [
+        {
+          title: t("general:Tasks"),
+          description: t("home:Manage and monitor background agent tasks"),
+          href: "/tasks",
+          icon: BotIcon,
+          color: "bg-primary/10 text-primary",
+        },
+        {
+          title: t("general:Scales"),
+          description: t("home:Scale your agent workloads efficiently"),
+          href: "/scales",
+          icon: ZapIcon,
+          color: "bg-primary/10 text-primary",
+        },
+      ],
+    },
+    {
+      label: t("home:Monitoring"),
+      items: [
+        {
+          title: t("home:Audit Logs"),
+          description: t("home:Track and review all agent activity"),
+          href: "/records",
+          icon: FileTextIcon,
+          color: "bg-primary/10 text-primary",
+        },
+        {
+          title: t("general:Sessions"),
+          description: t("home:View active and historical agent sessions"),
+          href: "/sessions",
+          icon: ShieldCheckIcon,
+          color: "bg-primary/10 text-primary",
+        },
+        {
+          title: t("home:API Keys"),
+          description: t("home:Manage access credentials and API keys"),
+          href: "/usages",
+          icon: KeyRoundIcon,
+          color: "bg-primary/10 text-primary",
+        },
+      ],
+    },
+  ]
+
   return (
     <div className="flex flex-col gap-10 p-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome to OpenAgent</h1>
-        <p className="mt-2 text-muted-foreground">
-          Your self-hosted AI agent platform. Build agents that actually do things.
-        </p>
+        <h1 className="text-3xl font-bold tracking-tight">{t("home:Welcome to OpenAgent")}</h1>
+        <p className="mt-2 text-muted-foreground">{t("home:Welcome subtitle")}</p>
       </div>
 
       {sections.map((section) => (
