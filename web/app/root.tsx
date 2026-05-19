@@ -9,6 +9,7 @@ import {
 
 import type { Route } from "./+types/root"
 import { SiteProvider } from "~/context/SiteContext"
+import { Toaster } from "~/components/ui/sonner"
 import "./app.css"
 
 // Runs before React loads — applies dark class immediately to avoid flash
@@ -26,6 +27,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
+        <Toaster />
         <ScrollRestoration />
         <Scripts />
       </body>

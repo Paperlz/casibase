@@ -312,11 +312,11 @@ export default function PipeEditPage() {
   async function handleChatTest() {
     if (!pipe) return
     if (!pipe.chatId) {
-      toast.error("Please enter a Chat ID")
+      toast.error(i18next.t("pipe:Chat ID required"))
       return
     }
     if (!pipe.chatTestMessage) {
-      toast.error("Please enter a test message")
+      toast.error(i18next.t("pipe:Chat test message required"))
       return
     }
     setTesting(true)
