@@ -23,6 +23,7 @@ import type { Message } from "~/backend/MessageBackend"
 import type { Store } from "~/backend/StoreBackend"
 import { useMessageStream } from "~/hooks/useMessageStream"
 import { useChatMessageHandlers } from "~/hooks/useChatMessageHandlers"
+import { useTts } from "~/hooks/useTts"
 
 type UploadedFile = {
   uid: number
@@ -59,9 +60,7 @@ export default function ChatPage() {
   const [inputValue, setInputValue] = useState("")
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
-  const [isReading, setIsReading] = useState(false)
-  const [isLoadingTTS, setIsLoadingTTS] = useState(false)
-  const [readingMessage, setReadingMessage] = useState<string | undefined>()
+  const { isReading, isLoadingTTS, readingMessage, handleToggleRead } = useTts()
   const [isVoiceInput, setIsVoiceInput] = useState(false)
 
   // Refs
@@ -540,7 +539,7 @@ export default function ChatPage() {
                 onRegenerate={handleRegenerate}
                 onMessageLike={handleMessageLike}
                 onCopyMessage={copyMessageText}
-                onToggleRead={() => {}}
+                onToggleRead={(m) => handleToggleRead(m, currentStore)}
                 onEditMessage={handleEditMessage}
                 isReading={isReading}
                 isLoadingTTS={isLoadingTTS}
