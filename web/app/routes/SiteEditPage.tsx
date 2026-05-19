@@ -137,10 +137,16 @@ export default function SiteEditPage() {
             onChange={(e) => update("name", e.target.value)}
           />
         </FormField>
-        <FormField label={i18next.t("general:Display name")} tooltip={i18next.t("general:Display name - Tooltip")}>
+        <FormField label={i18next.t("store:Welcome title")} tooltip={i18next.t("store:Welcome title - Tooltip")}>
           <Input
-            value={site.displayName}
-            onChange={(e) => update("displayName", e.target.value)}
+            value={site.welcomeTitle ?? ""}
+            onChange={(e) => update("welcomeTitle", e.target.value)}
+          />
+        </FormField>
+        <FormField label={i18next.t("store:Welcome text")} tooltip={i18next.t("store:Welcome text - Tooltip")}>
+          <Input
+            value={site.welcomeText ?? ""}
+            onChange={(e) => update("welcomeText", e.target.value)}
           />
         </FormField>
         <FormField label={i18next.t("general:HTML title")} tooltip={i18next.t("general:HTML title - Tooltip")}>

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { Link } from "react-router"
 import { useTranslation } from "react-i18next"
 import {
@@ -17,6 +18,7 @@ import {
   WrenchIcon,
   ZapIcon,
 } from "lucide-react"
+import { getBuiltInSite } from "~/backend/SiteBackend"
 
 interface QuickLink {
   title: string
@@ -32,6 +34,17 @@ export function meta() {
 
 export default function HomePage() {
   const { t } = useTranslation()
+  const [welcomeTitle, setWelcomeTitle] = useState<string>(t("home:Welcome to OpenAgent"))
+  const [welcomeText, setWelcomeText] = useState<string>(t("home:Welcome subtitle"))
+
+  useEffect(() => {
+    getBuiltInSite().then((res) => {
+      if (res.status === "ok" && res.data) {
+        if (res.data.welcomeTitle) setWelcomeTitle(res.data.welcomeTitle)
+        if (res.data.welcomeText) setWelcomeText(res.data.welcomeText)
+      }
+    })
+  }, [])
 
   const sections: { label: string; items: QuickLink[] }[] = [
     {
@@ -169,8 +182,8 @@ export default function HomePage() {
   return (
     <div className="flex flex-col gap-10 p-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t("home:Welcome to OpenAgent")}</h1>
-        <p className="mt-2 text-muted-foreground">{t("home:Welcome subtitle")}</p>
+        <h1 className="text-3xl font-bold tracking-tight">{welcomeTitle}</h1>
+        <p className="mt-2 text-muted-foreground">{welcomeText}</p>
       </div>
 
       {sections.map((section) => (

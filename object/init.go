@@ -661,6 +661,8 @@ func initBuiltInSite() {
 		Name:          "site-built-in",
 		CreatedTime:   util.GetCurrentTime(),
 		DisplayName:   "Built-in Site",
+		WelcomeTitle:  "Welcome to OpenAgent",
+		WelcomeText:   "Your self-hosted AI agent platform. Build agents that actually do things.",
 		ThemeColor:    "#404040",
 		HtmlTitle:     "OpenAgent",
 		FaviconUrl:    "https://cdn.openagentai.org/img/openagent.png",

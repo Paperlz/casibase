@@ -18,6 +18,8 @@ export type Site = {
   owner: string
   name: string
   displayName: string
+  welcomeTitle?: string
+  welcomeText?: string
   createdTime: string
   themeColor?: string
   htmlTitle?: string
