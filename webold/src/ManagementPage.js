@@ -230,7 +230,6 @@ function ManagementPage(props) {
     }
     if (currentUri === "/" || currentUri === "/home") {
       if (
-        Setting.isAnonymousUser(account) ||
         Setting.isChatUser(account) ||
         Setting.isAdminUser(account) ||
         Setting.isChatAdminUser(account) ||
@@ -274,7 +273,7 @@ function ManagementPage(props) {
   }
 
   function renderRightDropdown() {
-    if (Setting.isAnonymousUser(account) || Setting.getUrlParam("isRaw") !== null) {
+    if (Setting.getUrlParam("isRaw") !== null) {
       return (
         <div className="rightDropDown select-box">
           {renderUserInfo()}
@@ -283,12 +282,8 @@ function ManagementPage(props) {
     }
 
     const items = [];
-    if (!Setting.isAnonymousUser(account)) {
-      items.push(Setting.getItem(<><SettingOutlined />&nbsp;&nbsp;{i18next.t("account:My Account")}</>, "/account"));
-      items.push(Setting.getItem(<><LogoutOutlined />&nbsp;&nbsp;{i18next.t("account:Sign Out")}</>, "/logout"));
-    } else {
-      items.push(Setting.getItem(<><LoginOutlined />&nbsp;&nbsp;{i18next.t("account:Sign In")}</>, "/login"));
-    }
+    items.push(Setting.getItem(<><SettingOutlined />&nbsp;&nbsp;{i18next.t("account:My Account")}</>, "/account"));
+    items.push(Setting.getItem(<><LogoutOutlined />&nbsp;&nbsp;{i18next.t("account:Sign Out")}</>, "/logout"));
 
     const onClick = (e) => {
       if (e.key === "/account") {
@@ -558,7 +553,7 @@ function ManagementPage(props) {
       <Switch>
         <Route exact path="/callback" component={AuthCallback} />
         <Route exact path="/account" render={(props) => renderSigninIfNotSignedIn(Setting.isBasicLoginMode(account) ? <AccountPage account={account} {...props} /> : <Redirect to="/" />)} />
-        <Route exact path="/signin" render={(props) => Setting.isAnonymousUser(account) ? <SigninPage logo={siderLogo} {...props} /> : renderHomeIfSignedIn(<SigninPage logo={siderLogo} {...props} />)} />
+        <Route exact path="/signin" render={(props) => renderHomeIfSignedIn(<SigninPage logo={siderLogo} {...props} />)} />
         <Route exact path="/" render={(props) => renderSigninIfNotSignedIn(<HomePage account={account} {...props} />)} />
         <Route exact path="/home" render={(props) => renderSigninIfNotSignedIn(<HomePage account={account} {...props} />)} />
         <Route exact path="/stores" render={(props) => renderSigninIfNotSignedIn(<StoreListPage account={account} {...props} />)} />

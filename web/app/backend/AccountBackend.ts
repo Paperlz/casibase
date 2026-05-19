@@ -66,11 +66,6 @@ export function isLocalAdminUser(account?: Account | null): boolean {
   return isChatAdminUser(account) || isAdminUser(account)
 }
 
-export function isAnonymousUser(account?: Account | null): boolean {
-  if (!account) return false
-  return account.type === "anonymous-user"
-}
-
 export function isChatUser(account?: Account | null): boolean {
   if (!account) return false
   return account.type === "chat-user"

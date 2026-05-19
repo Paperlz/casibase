@@ -180,13 +180,6 @@ export function isLocalAndStoreAdminUser(account) {
   return isAdminUser(account);
 }
 
-export function isAnonymousUser(account) {
-  if (account === undefined || account === null) {
-    return false;
-  }
-  return account.type === "anonymous-user";
-}
-
 export function isChatUser(account) {
   if (account === undefined || account === null) {
     return false;

@@ -47,10 +47,6 @@ func createTransactionFromMessage(message *Message) *auth.Transaction {
 		State:       "Paid",
 	}
 
-	if util.IsAnonymousUserByUsername(message.User) {
-		transaction.Tag = "Organization"
-	}
-
 	return transaction
 }
 

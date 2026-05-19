@@ -15,8 +15,6 @@
 package util
 
 import (
-	"strings"
-
 	"github.com/the-open-agent/openagent/auth"
 )
 
@@ -24,10 +22,6 @@ const (
 	UserTypeChatAdmin       = "chat-admin"
 	UserTypeVideoNormalUser = "video-normal-user"
 )
-
-func IsAnonymousUserByUsername(username string) bool {
-	return strings.HasPrefix(username, "u-") && len(username) == 10
-}
 
 // IsGlobalAdmin checks if the user is a system-level admin (IsAdmin flag only)
 func IsGlobalAdmin(user *auth.User) bool {
