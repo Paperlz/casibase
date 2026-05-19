@@ -17,7 +17,7 @@ import { toast } from "sonner"
 import i18next from "i18next"
 import "~/i18n"
 
-import { getShortName, updateAccount } from "~/backend/AccountBackend"
+import { getShortName, updateAccount, type UpdateAccountRequest } from "~/backend/AccountBackend"
 import { useAccount } from "~/context/AccountContext"
 import { FormField, PasswordInput, SectionCard } from "~/lib/Setting"
 import { Button } from "~/components/ui/button"
@@ -89,6 +89,7 @@ export default function AccountPage() {
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [settingPassword, setSettingPassword] = useState(false)
 
   if (!account) return null
@@ -112,11 +113,21 @@ export default function AccountPage() {
     setPasswordOpen(false)
     setCurrentPassword("")
     setNewPassword("")
+    setConfirmPassword("")
   }
 
   function handleSetPassword() {
+    if (!currentPassword || !newPassword) {
+      toast.error(i18next.t("account:Password fields required"))
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error(i18next.t("account:Passwords do not match"))
+      return
+    }
     setSettingPassword(true)
-    updateAccount({ displayName, avatar, currentPassword, newPassword } as unknown as Parameters<typeof updateAccount>[0])
+    const req: UpdateAccountRequest = { displayName, avatar, currentPassword, newPassword }
+    updateAccount(req)
       .then((res) => {
         if (res.status === "ok") {
           toast.success(i18next.t("general:Successfully saved"))
@@ -207,6 +218,12 @@ export default function AccountPage() {
               <PasswordInput
                 value={newPassword}
                 onChange={setNewPassword}
+              />
+            </FormField>
+            <FormField label={i18next.t("account:Confirm new password")}>
+              <PasswordInput
+                value={confirmPassword}
+                onChange={setConfirmPassword}
               />
             </FormField>
           </div>

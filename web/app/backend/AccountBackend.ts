@@ -40,7 +40,12 @@ export function signout(): Promise<ApiResponse> {
   return apiFetch("/api/signout", { method: "POST" })
 }
 
-export function updateAccount(account: Partial<Account>): Promise<ApiResponse> {
+export type UpdateAccountRequest = Partial<Account> & {
+  currentPassword?: string
+  newPassword?: string
+}
+
+export function updateAccount(account: UpdateAccountRequest): Promise<ApiResponse> {
   return apiPost("/api/update-account", account)
 }
 
