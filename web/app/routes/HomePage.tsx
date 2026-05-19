@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router"
 import { useTranslation } from "react-i18next"
 import {
+  ArrowRightIcon,
   BotIcon,
   DatabaseIcon,
   FileTextIcon,
@@ -25,7 +26,11 @@ interface QuickLink {
   description: string
   href: string
   icon: React.ComponentType<{ className?: string }>
-  color: string
+}
+
+interface Section {
+  label: string
+  items: QuickLink[]
 }
 
 export function meta() {
@@ -46,26 +51,7 @@ export default function HomePage() {
     })
   }, [])
 
-  const sections: { label: string; items: QuickLink[] }[] = [
-    {
-      label: t("home:Get Started"),
-      items: [
-        {
-          title: t("general:Chat"),
-          description: t("home:Start a conversation with your AI assistant"),
-          href: "/chat",
-          icon: MessageCircleIcon,
-          color: "bg-primary/10 text-primary",
-        },
-        {
-          title: t("general:Quick Setup"),
-          description: t("home:Configure your AI platform in minutes"),
-          href: "/quick-setup",
-          icon: RocketIcon,
-          color: "bg-primary/10 text-primary",
-        },
-      ],
-    },
+  const sections: Section[] = [
     {
       label: t("general:Knowledge Base"),
       items: [
@@ -74,21 +60,18 @@ export default function HomePage() {
           description: t("home:Manage your AI agent knowledge stores"),
           href: "/stores",
           icon: LayoutGridIcon,
-          color: "bg-primary/10 text-primary",
         },
         {
           title: t("general:Files"),
           description: t("home:Upload and manage knowledge files"),
           href: "/files",
           icon: DatabaseIcon,
-          color: "bg-primary/10 text-primary",
         },
         {
           title: t("general:Vectors"),
           description: t("home:Manage vector embeddings and semantic search"),
           href: "/vectors",
           icon: NetworkIcon,
-          color: "bg-primary/10 text-primary",
         },
       ],
     },
@@ -100,35 +83,30 @@ export default function HomePage() {
           description: t("home:Connect and configure AI model providers"),
           href: "/providers",
           icon: PlugIcon,
-          color: "bg-primary/10 text-primary",
         },
         {
           title: t("general:Pipes"),
           description: t("home:Build and manage agent pipelines"),
           href: "/pipes",
           icon: GitBranchIcon,
-          color: "bg-primary/10 text-primary",
         },
         {
           title: t("general:Skills"),
           description: t("home:Define reusable AI agent skills"),
           href: "/skills",
           icon: SparklesIcon,
-          color: "bg-primary/10 text-primary",
         },
         {
           title: t("general:Tools"),
           description: t("home:Configure tools your agents can use"),
           href: "/tools",
           icon: WrenchIcon,
-          color: "bg-primary/10 text-primary",
         },
         {
           title: t("general:MCP Servers"),
           description: t("home:Connect Model Context Protocol servers"),
           href: "/servers",
           icon: ServerIcon,
-          color: "bg-primary/10 text-primary",
         },
       ],
     },
@@ -140,14 +118,12 @@ export default function HomePage() {
           description: t("home:Manage and monitor background agent tasks"),
           href: "/tasks",
           icon: BotIcon,
-          color: "bg-primary/10 text-primary",
         },
         {
           title: t("general:Scales"),
           description: t("home:Scale your agent workloads efficiently"),
           href: "/scales",
           icon: ZapIcon,
-          color: "bg-primary/10 text-primary",
         },
       ],
     },
@@ -159,60 +135,95 @@ export default function HomePage() {
           description: t("home:Track and review all agent activity"),
           href: "/records",
           icon: FileTextIcon,
-          color: "bg-primary/10 text-primary",
         },
         {
           title: t("general:Sessions"),
           description: t("home:View active and historical agent sessions"),
           href: "/sessions",
           icon: ShieldCheckIcon,
-          color: "bg-primary/10 text-primary",
         },
         {
           title: t("home:API Keys"),
           description: t("home:Manage access credentials and API keys"),
           href: "/usages",
           icon: KeyRoundIcon,
-          color: "bg-primary/10 text-primary",
         },
       ],
     },
   ]
 
   return (
-    <div className="flex flex-col gap-10 p-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">{welcomeTitle}</h1>
-        <p className="mt-2 text-muted-foreground">{welcomeText}</p>
-      </div>
+    <div className="min-h-full">
+      {/* Hero */}
+      <div className="relative overflow-hidden border-b border-border bg-gradient-to-br from-background via-background to-muted/40 px-6 py-12">
+        <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-primary/5 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 -left-16 h-56 w-56 rounded-full bg-primary/5 blur-3xl" />
 
-      {sections.map((section) => (
-        <div key={section.label} className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-            {section.label}
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {section.items.map((item) => {
-              const Icon = item.icon
-              return (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  className="group flex flex-col gap-3 rounded-xl border border-border bg-card p-5 transition-all hover:bg-accent/50 hover:shadow-sm"
-                >
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${item.color}`}>
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className="font-semibold">{item.title}</div>
-                    <div className="mt-0.5 text-sm text-muted-foreground">{item.description}</div>
-                  </div>
-                </Link>
-              )
-            })}
+        <div className="relative max-w-2xl">
+          <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
+            <SparklesIcon className="h-3 w-3" />
+            OpenAgent Platform
+          </div>
+          <h1 className="text-4xl font-bold tracking-tight">{welcomeTitle}</h1>
+          <p className="mt-3 text-base leading-relaxed text-muted-foreground">{welcomeText}</p>
+          <div className="mt-6 flex items-center gap-3">
+            <Link
+              to="/chat"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
+            >
+              <MessageCircleIcon className="h-4 w-4" />
+              {t("general:Chat")}
+            </Link>
+            <Link
+              to="/quick-setup"
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition-all hover:bg-accent hover:shadow-md"
+            >
+              <RocketIcon className="h-4 w-4" />
+              {t("general:Quick Setup")}
+            </Link>
           </div>
         </div>
-      ))}
+      </div>
+
+      {/* Sections */}
+      <div className="flex flex-col gap-8 p-6">
+        {sections.map((section) => (
+          <div key={section.label} className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-primary/60" />
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                {section.label}
+              </h2>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {section.items.map((item) => {
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    className="group flex flex-col gap-3 rounded-xl border border-border bg-card p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/30 hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                        <Icon className="h-4 w-4 text-primary" />
+                      </div>
+                      <ArrowRightIcon className="h-4 w-4 translate-x-0 text-transparent transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-muted-foreground/50" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold leading-snug">{item.title}</div>
+                      <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                        {item.description}
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
