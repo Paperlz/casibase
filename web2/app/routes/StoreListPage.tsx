@@ -6,7 +6,6 @@ import {
   ExternalLinkIcon,
   FileIcon,
   Loader2Icon,
-  MoreHorizontalIcon,
   PlusIcon,
   RefreshCwIcon,
   Trash2Icon,
@@ -38,13 +37,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "~/components/ui/dropdown-menu"
 import { Switch } from "~/components/ui/switch"
 import {
   Table,
@@ -297,7 +289,7 @@ export default function StoreListPage() {
                   <TableHead className="w-24">{i18next.t("store:Chat count")}</TableHead>
                   <TableHead className="w-28">{i18next.t("chat:Message count")}</TableHead>
                   <TableHead className="w-24">{i18next.t("store:Vector count")}</TableHead>
-                  <TableHead className="w-48">{i18next.t("provider:Model provider")}</TableHead>
+                  <TableHead className="w-72">{i18next.t("provider:Model provider")}</TableHead>
                 </>
               )}
               <TableHead className="w-20">{i18next.t("general:State")}</TableHead>
@@ -383,86 +375,85 @@ export default function StoreListPage() {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title={i18next.t("general:Edit")}
+                          onClick={() => navigate(`/stores/${store.owner}/${store.name}`)}
+                        >
+                          <EditIcon className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title={i18next.t("general:Files")}
+                        onClick={() => navigate(`/stores/${store.owner}/${store.name}/view`)}
+                      >
+                        <FileIcon className="h-3.5 w-3.5" />
+                      </Button>
+                      {!hideChat && (
                         <>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
-                            title={i18next.t("general:Edit")}
-                            onClick={() => navigate(`/stores/${store.owner}/${store.name}`)}
+                            title={i18next.t("general:Copy Link")}
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                `${window.location.origin}/${store.owner}/${store.name}/chat`
+                              )
+                              toast.success(i18next.t("general:Successfully copied"))
+                            }}
                           >
-                            <EditIcon className="h-3.5 w-3.5" />
+                            <CopyIcon className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-destructive hover:text-destructive"
-                            title={i18next.t("general:Delete")}
-                            disabled={store.isDefault}
-                            onClick={() => setDeleteTarget(store)}
+                            className="h-7 w-7"
+                            title={i18next.t("store:Open Chat")}
+                            onClick={() => {
+                              window.open(
+                                `${window.location.origin}/${store.owner}/${store.name}/chat`,
+                                "_blank"
+                              )
+                            }}
                           >
-                            <Trash2Icon className="h-3.5 w-3.5" />
+                            <ExternalLinkIcon className="h-3.5 w-3.5" />
                           </Button>
                         </>
                       )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                          title={i18next.t("general:More")}
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title={i18next.t("general:Refresh Vectors")}
+                          disabled={generating[store.name]}
+                          onClick={() => handleRefreshVectors(store)}
                         >
-                          <MoreHorizontalIcon className="h-3.5 w-3.5" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => navigate(`/stores/${store.owner}/${store.name}/view`)}
-                          >
-                            <FileIcon className="h-4 w-4" />
-                            {i18next.t("general:Files")}
-                          </DropdownMenuItem>
-                          {!hideChat && (
-                            <>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  navigator.clipboard.writeText(
-                                    `${window.location.origin}/${store.owner}/${store.name}/chat`
-                                  )
-                                  toast.success(i18next.t("general:Successfully copied"))
-                                }}
-                              >
-                                <CopyIcon className="h-4 w-4" />
-                                {i18next.t("general:Copy Link")}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  window.open(
-                                    `${window.location.origin}/${store.owner}/${store.name}/chat`,
-                                    "_blank"
-                                  )
-                                }}
-                              >
-                                <ExternalLinkIcon className="h-4 w-4" />
-                                {i18next.t("store:Open Chat")}
-                              </DropdownMenuItem>
-                            </>
+                          {generating[store.name] ? (
+                            <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCwIcon className="h-3.5 w-3.5" />
                           )}
-                          {isAdmin && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                disabled={generating[store.name]}
-                                onClick={() => handleRefreshVectors(store)}
-                              >
-                                {generating[store.name] ? (
-                                  <Loader2Icon className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <RefreshCwIcon className="h-4 w-4" />
-                                )}
-                                {i18next.t("general:Refresh Vectors")}
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        </Button>
+                      )}
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          title={i18next.t("general:Delete")}
+                          disabled={store.isDefault}
+                          onClick={() => setDeleteTarget(store)}
+                        >
+                          <Trash2Icon className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
