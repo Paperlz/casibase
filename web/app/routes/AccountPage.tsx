@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import i18next from "i18next"
 import "~/i18n"
@@ -75,9 +75,16 @@ function AvatarPreview({ avatarUrl, name }: { avatarUrl: string; name: string })
 export default function AccountPage() {
   const { account, reload } = useAccount()
 
-  const [displayName, setDisplayName] = useState(account?.displayName ?? "")
-  const [avatar, setAvatar] = useState(account?.avatar ?? "")
+  const [displayName, setDisplayName] = useState("")
+  const [avatar, setAvatar] = useState("")
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (account) {
+      setDisplayName(account.displayName ?? "")
+      setAvatar(account.avatar ?? "")
+    }
+  }, [account])
 
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
