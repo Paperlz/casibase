@@ -1,9 +1,8 @@
 import { reactRouter } from "@react-router/dev/vite"
 import tailwindcss from "@tailwindcss/vite"
 import { cpSync, existsSync, readdirSync, rmSync } from "fs"
-import type { IncomingMessage, ServerResponse } from "node:http"
 import { join, resolve } from "path"
-import { defineConfig, type ViteDevServer } from "vite"
+import { defineConfig } from "vite"
 import tsconfigPaths from "vite-tsconfig-paths"
 
 const optimizeDepsInclude = [
@@ -61,54 +60,6 @@ const optimizeDepsInclude = [
   "xlsx",
 ]
 
-function openAgentDebugLogMiddleware() {
-  return {
-    name: "openagent-debug-log",
-    apply: "serve" as const,
-    configureServer(server: ViteDevServer) {
-      server.middlewares.use("/__openagent_debug_log", (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-        if (req.method !== "POST") {
-          next()
-          return
-        }
-
-        let body = ""
-        let tooLarge = false
-        req.setEncoding("utf8")
-        req.on("data", (chunk: string) => {
-          if (tooLarge) return
-          body += chunk
-          if (body.length > 2_000_000) {
-            tooLarge = true
-            res.statusCode = 413
-            res.end()
-            req.destroy()
-          }
-        })
-        req.on("end", () => {
-          if (tooLarge) return
-          try {
-            const payload = JSON.parse(body || "{}")
-            const level = payload?.level === "error" ? "error" : payload?.level === "warn" ? "warn" : "log"
-            const event = typeof payload?.event === "string" ? payload.event : "unknown-event"
-            const timestamp = typeof payload?.timestamp === "string" ? payload.timestamp : new Date().toISOString()
-            const pathname = typeof payload?.location?.pathname === "string" ? payload.location.pathname : ""
-            console[level](`[web-debug] ${timestamp} ${event}${pathname ? ` @ ${pathname}` : ""}`)
-            console[level](JSON.stringify(payload, null, 2))
-          } catch (error) {
-            console.error("[web-debug] failed to parse browser debug payload")
-            console.error(error)
-            console.error(body)
-          }
-
-          res.statusCode = 204
-          res.end()
-        })
-      })
-    },
-  }
-}
-
 function flattenClientBuild() {
   return {
     name: "flatten-client-build",
@@ -131,7 +82,7 @@ function flattenClientBuild() {
 }
 
 export default defineConfig({
-  plugins: [openAgentDebugLogMiddleware(), tailwindcss(), reactRouter(), tsconfigPaths(), flattenClientBuild()],
+  plugins: [tailwindcss(), reactRouter(), tsconfigPaths(), flattenClientBuild()],
   server: {
     port: 13001,
   },
