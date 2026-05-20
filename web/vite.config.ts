@@ -1,9 +1,113 @@
 import { reactRouter } from "@react-router/dev/vite"
 import tailwindcss from "@tailwindcss/vite"
 import { cpSync, existsSync, readdirSync, rmSync } from "fs"
+import type { IncomingMessage, ServerResponse } from "node:http"
 import { join, resolve } from "path"
-import { defineConfig } from "vite"
+import { defineConfig, type ViteDevServer } from "vite"
 import tsconfigPaths from "vite-tsconfig-paths"
+
+const optimizeDepsInclude = [
+  "@base-ui/react",
+  "@base-ui/react/accordion",
+  "@base-ui/react/alert-dialog",
+  "@base-ui/react/avatar",
+  "@base-ui/react/button",
+  "@base-ui/react/checkbox",
+  "@base-ui/react/collapsible",
+  "@base-ui/react/context-menu",
+  "@base-ui/react/dialog",
+  "@base-ui/react/direction-provider",
+  "@base-ui/react/input",
+  "@base-ui/react/menu",
+  "@base-ui/react/menubar",
+  "@base-ui/react/merge-props",
+  "@base-ui/react/navigation-menu",
+  "@base-ui/react/popover",
+  "@base-ui/react/preview-card",
+  "@base-ui/react/progress",
+  "@base-ui/react/radio",
+  "@base-ui/react/radio-group",
+  "@base-ui/react/scroll-area",
+  "@base-ui/react/select",
+  "@base-ui/react/separator",
+  "@base-ui/react/slider",
+  "@base-ui/react/switch",
+  "@base-ui/react/tabs",
+  "@base-ui/react/toggle",
+  "@base-ui/react/toggle-group",
+  "@base-ui/react/tooltip",
+  "@base-ui/react/use-render",
+  "class-variance-authority",
+  "clsx",
+  "cmdk",
+  "date-fns",
+  "dompurify",
+  "embla-carousel-react",
+  "highlight.js",
+  "i18next",
+  "input-otp",
+  "katex",
+  "lucide-react",
+  "marked",
+  "next-themes",
+  "react-day-picker",
+  "react-i18next",
+  "react-resizable-panels",
+  "react-router",
+  "recharts",
+  "sonner",
+  "tailwind-merge",
+  "vaul",
+  "xlsx",
+]
+
+function openAgentDebugLogMiddleware() {
+  return {
+    name: "openagent-debug-log",
+    apply: "serve" as const,
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use("/__openagent_debug_log", (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if (req.method !== "POST") {
+          next()
+          return
+        }
+
+        let body = ""
+        let tooLarge = false
+        req.setEncoding("utf8")
+        req.on("data", (chunk: string) => {
+          if (tooLarge) return
+          body += chunk
+          if (body.length > 2_000_000) {
+            tooLarge = true
+            res.statusCode = 413
+            res.end()
+            req.destroy()
+          }
+        })
+        req.on("end", () => {
+          if (tooLarge) return
+          try {
+            const payload = JSON.parse(body || "{}")
+            const level = payload?.level === "error" ? "error" : payload?.level === "warn" ? "warn" : "log"
+            const event = typeof payload?.event === "string" ? payload.event : "unknown-event"
+            const timestamp = typeof payload?.timestamp === "string" ? payload.timestamp : new Date().toISOString()
+            const pathname = typeof payload?.location?.pathname === "string" ? payload.location.pathname : ""
+            console[level](`[web-debug] ${timestamp} ${event}${pathname ? ` @ ${pathname}` : ""}`)
+            console[level](JSON.stringify(payload, null, 2))
+          } catch (error) {
+            console.error("[web-debug] failed to parse browser debug payload")
+            console.error(error)
+            console.error(body)
+          }
+
+          res.statusCode = 204
+          res.end()
+        })
+      })
+    },
+  }
+}
 
 function flattenClientBuild() {
   return {
@@ -27,9 +131,12 @@ function flattenClientBuild() {
 }
 
 export default defineConfig({
-  plugins: [tailwindcss(), reactRouter(), tsconfigPaths(), flattenClientBuild()],
+  plugins: [openAgentDebugLogMiddleware(), tailwindcss(), reactRouter(), tsconfigPaths(), flattenClientBuild()],
   server: {
     port: 13001,
+  },
+  optimizeDeps: {
+    include: optimizeDepsInclude,
   },
   build: {
     assetsDir: "static",
