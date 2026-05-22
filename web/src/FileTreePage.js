@@ -19,12 +19,13 @@ import FileTree from "./FileTree";
 import i18next from "i18next";
 import * as Setting from "./Setting";
 
+const ALL_STORES = "All";
+
 class FileTreePage extends React.Component {
   constructor(props) {
     super(props);
     const routeStore = this.getRouteStore(props);
-    this.storeRequestId = 0;
-    this.storeChangeRequestId = 0;
+    this.requestId = 0;
     this.selectedStoreName = Setting.getStore();
     this.state = {
       classes: props,
@@ -35,47 +36,64 @@ class FileTreePage extends React.Component {
   }
 
   componentDidMount() {
-    this.getStore();
+    this.loadRouteStore();
     window.addEventListener("storeChanged", this.handleStoreChange);
   }
 
   componentDidUpdate(prevProps) {
-    const prevRouteStore = this.getRouteStore(prevProps);
     const routeStore = this.getRouteStore();
-    if (prevRouteStore.owner !== routeStore.owner || prevRouteStore.storeName !== routeStore.storeName) {
-      this.loadStore(routeStore.owner, routeStore.storeName);
+    if (this.getStoreOwner(prevProps) !== routeStore.owner || this.getRouteStoreName(prevProps) !== routeStore.storeName) {
+      this.loadRouteStore(routeStore);
     }
   }
 
   componentWillUnmount() {
-    this.storeRequestId += 1;
-    this.storeChangeRequestId += 1;
+    this.invalidateRequests();
     window.removeEventListener("storeChanged", this.handleStoreChange);
+  }
+
+  getStoreOwner(props = this.props) {
+    return props.match?.params?.owner || props.owner || props.account?.owner || StoreBackend.DEFAULT_STORE_OWNER;
+  }
+
+  getRouteStoreName(props = this.props) {
+    return props.match?.params?.storeName || props.storeName || "";
   }
 
   getRouteStore(props = this.props) {
     return {
-      owner: props.match?.params?.owner || "admin",
-      storeName: props.match?.params?.storeName || props.storeName || "_default_store_",
+      owner: this.getStoreOwner(props),
+      storeName: this.getRouteStoreName(props),
     };
   }
 
   getStore() {
-    const {owner, storeName} = this.getRouteStore();
-    this.loadStore(owner, storeName);
+    this.loadRouteStore();
+  }
+
+  loadRouteStore(routeStore = this.getRouteStore()) {
+    if (routeStore.storeName) {
+      this.loadStore(routeStore.owner, routeStore.storeName);
+      return;
+    }
+    this.loadDefaultStore();
+  }
+
+  invalidateRequests() {
+    this.requestId += 1;
+    return this.requestId;
   }
 
   loadStore(owner, storeName) {
-    const requestId = ++this.storeRequestId;
+    const requestId = this.invalidateRequests();
     this.setState({
       owner: owner,
       storeName: storeName,
-      store: null,
     });
 
     StoreBackend.getStore(owner, storeName)
       .then((res) => {
-        if (requestId !== this.storeRequestId) {
+        if (requestId !== this.requestId) {
           return;
         }
 
@@ -95,6 +113,23 @@ class FileTreePage extends React.Component {
       });
   }
 
+  loadDefaultStore() {
+    const requestId = this.invalidateRequests();
+
+    StoreBackend.getDefaultStore()
+      .then((res) => {
+        if (requestId !== this.requestId) {
+          return;
+        }
+
+        if (res.status === "ok" && res.data) {
+          this.navigateToStore(res.data.owner || this.getStoreOwner(), res.data.name);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
+      });
+  }
+
   handleStoreChange = () => {
     const storeName = Setting.getStore();
     if (storeName === this.selectedStoreName) {
@@ -102,25 +137,14 @@ class FileTreePage extends React.Component {
     }
 
     this.selectedStoreName = storeName;
-    const requestId = ++this.storeChangeRequestId;
 
-    if (storeName !== "All") {
-      this.navigateToStore("admin", storeName);
+    if (storeName !== ALL_STORES) {
+      this.invalidateRequests();
+      this.navigateToStore(this.getStoreOwner(), storeName);
       return;
     }
 
-    StoreBackend.getStore("admin", "_default_store_")
-      .then((res) => {
-        if (requestId !== this.storeChangeRequestId) {
-          return;
-        }
-
-        if (res.status === "ok" && res.data) {
-          this.navigateToStore(res.data.owner || "admin", res.data.name);
-        } else {
-          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
-        }
-      });
+    this.loadDefaultStore();
   };
 
   navigateToStore(owner, storeName) {

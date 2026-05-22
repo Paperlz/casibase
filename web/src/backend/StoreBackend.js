@@ -14,6 +14,9 @@
 
 import * as Setting from "../Setting";
 
+export const DEFAULT_STORE_OWNER = "admin";
+const DEFAULT_STORE_NAME = "_default_store_";
+
 export function getGlobalStores(name = "", page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
   return fetch(`${Setting.ServerUrl}/api/get-global-stores?name=${name}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
     method: "GET",
@@ -42,6 +45,10 @@ export function getStore(owner, name) {
       "Accept-Language": Setting.getAcceptLanguage(),
     },
   }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function getDefaultStore() {
+  return getStore(DEFAULT_STORE_OWNER, DEFAULT_STORE_NAME);
 }
 
 export function getStoreNames(owner) {
