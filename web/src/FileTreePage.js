@@ -22,33 +22,118 @@ import * as Setting from "./Setting";
 class FileTreePage extends React.Component {
   constructor(props) {
     super(props);
+    const routeStore = this.getRouteStore(props);
+    this.storeRequestId = 0;
+    this.storeChangeRequestId = 0;
+    this.selectedStoreName = Setting.getStore();
     this.state = {
       classes: props,
-      owner: props.match?.params?.owner !== undefined ? props.match.params.owner : "admin",
-      storeName: props.match?.params?.storeName !== undefined ? props.match.params.storeName : this.props.storeName,
+      owner: routeStore.owner,
+      storeName: routeStore.storeName,
       store: null,
     };
   }
 
-  UNSAFE_componentWillMount() {
+  componentDidMount() {
     this.getStore();
+    window.addEventListener("storeChanged", this.handleStoreChange);
+  }
+
+  componentDidUpdate(prevProps) {
+    const prevRouteStore = this.getRouteStore(prevProps);
+    const routeStore = this.getRouteStore();
+    if (prevRouteStore.owner !== routeStore.owner || prevRouteStore.storeName !== routeStore.storeName) {
+      this.loadStore(routeStore.owner, routeStore.storeName);
+    }
+  }
+
+  componentWillUnmount() {
+    this.storeRequestId += 1;
+    this.storeChangeRequestId += 1;
+    window.removeEventListener("storeChanged", this.handleStoreChange);
+  }
+
+  getRouteStore(props = this.props) {
+    return {
+      owner: props.match?.params?.owner || "admin",
+      storeName: props.match?.params?.storeName || props.storeName || "_default_store_",
+    };
   }
 
   getStore() {
-    StoreBackend.getStore(this.state.owner, this.state.storeName)
+    const {owner, storeName} = this.getRouteStore();
+    this.loadStore(owner, storeName);
+  }
+
+  loadStore(owner, storeName) {
+    const requestId = ++this.storeRequestId;
+    this.setState({
+      owner: owner,
+      storeName: storeName,
+      store: null,
+    });
+
+    StoreBackend.getStore(owner, storeName)
       .then((res) => {
+        if (requestId !== this.storeRequestId) {
+          return;
+        }
+
         if (res.status === "ok") {
           if (res.data && typeof res.data2 === "string" && res.data2 !== "") {
             res.data.error = res.data2;
           }
 
+          const store = res.data;
           this.setState({
-            store: res.data,
+            store: store,
+            ...(store ? {owner: store.owner, storeName: store.name} : {}),
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
         }
       });
+  }
+
+  handleStoreChange = () => {
+    const storeName = Setting.getStore();
+    if (storeName === this.selectedStoreName) {
+      return;
+    }
+
+    this.selectedStoreName = storeName;
+    const requestId = ++this.storeChangeRequestId;
+
+    if (storeName !== "All") {
+      this.navigateToStore("admin", storeName);
+      return;
+    }
+
+    StoreBackend.getStore("admin", "_default_store_")
+      .then((res) => {
+        if (requestId !== this.storeChangeRequestId) {
+          return;
+        }
+
+        if (res.status === "ok" && res.data) {
+          this.navigateToStore(res.data.owner || "admin", res.data.name);
+        } else {
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+        }
+      });
+  };
+
+  navigateToStore(owner, storeName) {
+    if (!storeName) {
+      return;
+    }
+
+    const pathname = `/stores/${owner}/${encodeURIComponent(storeName)}/view`;
+    if (this.props.location?.pathname === pathname) {
+      this.loadStore(owner, storeName);
+    } else {
+      this.props.history.push(pathname);
+    }
   }
 
   render() {
