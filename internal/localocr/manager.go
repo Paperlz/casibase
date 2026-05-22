@@ -21,11 +21,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,9 +39,12 @@ import (
 const (
 	DefaultEndpoint = "http://127.0.0.1:8001/ocr/pdf"
 
-	defaultHealthURL      = "http://127.0.0.1:8001/health"
+	defaultHost           = "127.0.0.1"
+	defaultPort           = 8001
 	installMarkerFile     = "requirements.sha256"
-	managedServiceTimeout = 2 * time.Minute
+	installCommandTimeout = 10 * time.Minute
+	serviceReadyTimeout   = 2 * time.Minute
+	healthCheckTimeout    = 2 * time.Second
 )
 
 type Manager struct {
@@ -51,11 +56,17 @@ type Manager struct {
 	installMarker string
 	endpoint      string
 	healthURL     string
+	port          int
 	httpClient    *http.Client
 
 	mu  sync.Mutex
 	cmd *exec.Cmd
 }
+
+var (
+	managedMu sync.Mutex
+	managed   *Manager
+)
 
 func NewManager(rootDir string) *Manager {
 	stateDir := filepath.Join(rootDir, "tmp", "ocr-service")
@@ -68,9 +79,41 @@ func NewManager(rootDir string) *Manager {
 		venvDir:       filepath.Join(stateDir, ".venv"),
 		installMarker: filepath.Join(stateDir, installMarkerFile),
 		endpoint:      DefaultEndpoint,
-		healthURL:     defaultHealthURL,
-		httpClient:    &http.Client{Timeout: 2 * time.Second},
+		healthURL:     healthURL(defaultPort),
+		port:          defaultPort,
+		httpClient:    &http.Client{Timeout: healthCheckTimeout},
 	}
+}
+
+func EnsureRunning(ctx context.Context) (string, error) {
+	managedMu.Lock()
+	defer managedMu.Unlock()
+
+	if managed != nil {
+		if managed.isHealthy() {
+			return managed.endpoint, nil
+		}
+		managed.Stop()
+		managed = nil
+	}
+
+	manager, err := Start(ctx)
+	if err != nil {
+		return "", err
+	}
+	managed = manager
+	return manager.endpoint, nil
+}
+
+func StopManaged() {
+	managedMu.Lock()
+	defer managedMu.Unlock()
+
+	if managed == nil {
+		return
+	}
+	managed.Stop()
+	managed = nil
 }
 
 func Start(ctx context.Context) (*Manager, error) {
@@ -81,7 +124,8 @@ func Start(ctx context.Context) (*Manager, error) {
 
 	manager := NewManager(rootDir)
 	if err = manager.Start(ctx); err != nil {
-		return manager, err
+		manager.Stop()
+		return nil, err
 	}
 	return manager, nil
 }
@@ -102,7 +146,29 @@ func (m *Manager) Start(ctx context.Context) error {
 	if err = m.ensureInstalled(ctx, python); err != nil {
 		return err
 	}
+
+	port, err := m.resolvePort()
+	if err != nil {
+		return err
+	}
+	m.setPort(port)
 	return m.startService(ctx)
+}
+
+func (m *Manager) resolvePort() (int, error) {
+	if m.isHealthyAt(defaultPort) {
+		return defaultPort, nil
+	}
+	if isPortAvailable(defaultPort) {
+		return defaultPort, nil
+	}
+	return freePort()
+}
+
+func (m *Manager) setPort(port int) {
+	m.port = port
+	m.endpoint = endpointURL(port)
+	m.healthURL = healthURL(port)
 }
 
 func (m *Manager) ensureServiceFiles() error {
@@ -165,15 +231,15 @@ func (m *Manager) ensureInstalled(ctx context.Context, python string) error {
 	}
 
 	logs.Info("Preparing local OCR Python environment at %s", m.venvDir)
-	if err := m.run(ctx, m.rootDir, python, "-m", "venv", m.venvDir); err != nil {
+	if err := m.runInstallCommand(ctx, m.rootDir, python, "-m", "venv", m.venvDir); err != nil {
 		return fmt.Errorf("failed to create OCR virtual environment: %w", err)
 	}
 
 	venvPython := venvPythonPath(m.venvDir)
-	if err := m.run(ctx, m.rootDir, venvPython, "-m", "pip", "install", "--upgrade", "pip"); err != nil {
+	if err := m.runInstallCommand(ctx, m.rootDir, venvPython, "-m", "pip", "install", "--upgrade", "pip"); err != nil {
 		return fmt.Errorf("failed to upgrade pip for OCR service: %w", err)
 	}
-	if err := m.run(ctx, m.rootDir, venvPython, "-m", "pip", "install", "-r", m.requirements); err != nil {
+	if err := m.runInstallCommand(ctx, m.rootDir, venvPython, "-m", "pip", "install", "-r", m.requirements); err != nil {
 		return fmt.Errorf("failed to install OCR dependencies: %w", err)
 	}
 
@@ -190,7 +256,7 @@ func (m *Manager) ensureInstalled(ctx context.Context, python string) error {
 func (m *Manager) startService(ctx context.Context) error {
 	m.mu.Lock()
 	venvPython := venvPythonPath(m.venvDir)
-	cmd := exec.CommandContext(ctx, venvPython, "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", "8001")
+	cmd := exec.Command(venvPython, "-m", "uvicorn", "app:app", "--host", defaultHost, "--port", strconv.Itoa(m.port))
 	cmd.Dir = m.serviceDir
 	cmd.Stdout = localOcrLogWriter{}
 	cmd.Stderr = localOcrLogWriter{}
@@ -206,7 +272,7 @@ func (m *Manager) startService(ctx context.Context) error {
 		done <- cmd.Wait()
 	}()
 
-	deadline := time.Now().Add(managedServiceTimeout)
+	deadline := time.Now().Add(serviceReadyTimeout)
 	for time.Now().Before(deadline) {
 		if m.isHealthy() {
 			logs.Info("Local OCR service is ready at %s", m.endpoint)
@@ -259,7 +325,15 @@ func (m *Manager) requirementsHash() (string, error) {
 }
 
 func (m *Manager) isHealthy() bool {
-	resp, err := m.httpClient.Get(m.healthURL)
+	return m.isHealthyURL(m.healthURL)
+}
+
+func (m *Manager) isHealthyAt(port int) bool {
+	return m.isHealthyURL(healthURL(port))
+}
+
+func (m *Manager) isHealthyURL(url string) bool {
+	resp, err := m.httpClient.Get(url)
 	if err != nil {
 		return false
 	}
@@ -277,12 +351,21 @@ func (m *Manager) isHealthy() bool {
 	return body.Status == "ok"
 }
 
-func (m *Manager) run(ctx context.Context, dir string, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
+func (m *Manager) runInstallCommand(ctx context.Context, dir string, name string, args ...string) error {
+	commandCtx, cancel := context.WithTimeout(ctx, installCommandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(commandCtx, name, args...)
 	cmd.Dir = dir
 	cmd.Stdout = localOcrLogWriter{}
 	cmd.Stderr = localOcrLogWriter{}
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		if commandCtx.Err() != nil {
+			return commandCtx.Err()
+		}
+		return err
+	}
+	return nil
 }
 
 func venvPythonPath(venvDir string) string {
@@ -309,6 +392,37 @@ func copyEmbeddedService(source fs.FS, targetDir string) error {
 		}
 		return os.WriteFile(targetPath, data, 0o644)
 	})
+}
+
+func endpointURL(port int) string {
+	return fmt.Sprintf("http://%s:%d/ocr/pdf", defaultHost, port)
+}
+
+func healthURL(port int) string {
+	return fmt.Sprintf("http://%s:%d/health", defaultHost, port)
+}
+
+func isPortAvailable(port int) bool {
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", defaultHost, port))
+	if err != nil {
+		return false
+	}
+	_ = listener.Close()
+	return true
+}
+
+func freePort() (int, error) {
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:0", defaultHost))
+	if err != nil {
+		return 0, err
+	}
+	defer listener.Close()
+
+	address, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		return 0, fmt.Errorf("failed to resolve local OCR listener address")
+	}
+	return address.Port, nil
 }
 
 type localOcrLogWriter struct{}

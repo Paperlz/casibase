@@ -12,7 +12,7 @@ This service provides the OCR endpoint used by the `local_file` tool.
 
 ## Run with OpenAgent
 
-OpenAgent starts this service automatically on startup.
+OpenAgent starts the managed OCR service lazily on the first `local_pdf_ocr_read` call when the `local_file` tool Provider URL is empty.
 
 The managed Python environment is created under:
 
@@ -20,13 +20,13 @@ The managed Python environment is created under:
 tmp/ocr-service/.venv
 ```
 
-If the `local_file` tool Provider URL is empty, OpenAgent uses the managed endpoint:
+If the `local_file` tool Provider URL is empty, OpenAgent uses the managed endpoint by default:
 
 ```text
 http://127.0.0.1:8001/ocr/pdf
 ```
 
-Python 3.10+ must already be installed on the machine. OpenAgent installs the Python package dependencies into the managed virtual environment.
+Python 3.10+ must already be installed on the machine. OpenAgent installs the Python package dependencies into the managed virtual environment during the first managed OCR startup.
 
 ## Run with Docker
 

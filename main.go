@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/beego/beego"
 	"github.com/beego/beego/logs"
@@ -113,19 +114,17 @@ func main() {
 
 	ctx, stopSignal := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignal()
-
-	ocrManager, err := localocr.Start(ctx)
-	if err != nil {
-		logs.Warning("Local OCR service is unavailable: %v", err)
-	} else {
-		defer ocrManager.Stop()
-	}
+	defer localocr.StopManaged()
 	go func() {
 		<-ctx.Done()
-		if ocrManager != nil {
-			ocrManager.Stop()
+		stopSignal()
+		localocr.StopManaged()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := beego.BeeApp.Server.Shutdown(shutdownCtx); err != nil {
+			logs.Warning("Failed to shut down HTTP server: %v", err)
 		}
-		os.Exit(0)
 	}()
 
 	go object.ClearThroughputPerSecond()

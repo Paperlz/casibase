@@ -246,12 +246,12 @@ func localFileReadText(path, ext, lang string) (string, error) {
 	return string(bs), nil
 }
 
-func localFileOcrEndpoint(endpoint string) string {
+func localFileOcrEndpoint(ctx context.Context, endpoint string) (string, error) {
 	endpoint = strings.TrimSpace(endpoint)
 	if endpoint != "" {
-		return endpoint
+		return endpoint, nil
 	}
-	return localocr.DefaultEndpoint
+	return localocr.EnsureRunning(ctx)
 }
 
 func localFilePostPdfOcr(ctx context.Context, endpoint string, path string) (string, error) {
@@ -394,8 +394,6 @@ func (b *localPdfOcrReadBuiltin) GetInputSchema() interface{} {
 }
 
 func (b *localPdfOcrReadBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
-	endpoint := localFileOcrEndpoint(b.endpoint)
-
 	path := localFileStringArg(arguments, "path")
 	if err := localFileRequireAbsolutePath(path, "path"); err != nil {
 		return localFileError(err.Error()), nil
@@ -409,6 +407,11 @@ func (b *localPdfOcrReadBuiltin) Execute(ctx context.Context, arguments map[stri
 	}
 	if strings.ToLower(filepath.Ext(path)) != ".pdf" {
 		return localFileError("path must be a PDF file"), nil
+	}
+
+	endpoint, err := localFileOcrEndpoint(ctx, b.endpoint)
+	if err != nil {
+		return localFileError(fmt.Sprintf("failed to start managed OCR service: %s", err.Error())), nil
 	}
 
 	text, err := localFilePostPdfOcr(ctx, endpoint, path)
