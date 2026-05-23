@@ -156,14 +156,14 @@ func RollbackSnapshot(id string) (bool, error) {
 	}
 
 	for _, file := range snapshot.Files {
-		if err = validateSnapshotAfterState(file); err != nil {
-			return false, err
+		if err = validateSnapshotRollbackState(file); err != nil {
+			return false, markSnapshotRollbackError(snapshot, err)
 		}
 	}
 
 	for i := len(snapshot.Files) - 1; i >= 0; i-- {
 		if err = rollbackSnapshotFile(snapshot.Files[i]); err != nil {
-			return false, err
+			return false, markSnapshotRollbackError(snapshot, err)
 		}
 	}
 
@@ -173,9 +173,13 @@ func RollbackSnapshot(id string) (bool, error) {
 	affected, err := adapter.engine.ID(core.PK{snapshot.Owner, snapshot.Name}).
 		Cols("state", "error_text", "rolled_back_time").Update(snapshot)
 	if err != nil {
-		return false, err
+		return false, markSnapshotRollbackError(snapshot, err)
 	}
-	return affected != 0, nil
+	if affected == 0 {
+		err = fmt.Errorf("failed to update snapshot rollback state: %s", id)
+		return false, markSnapshotRollbackError(snapshot, err)
+	}
+	return true, nil
 }
 
 func clearSnapshotsForList(snapshots []*Snapshot) {
@@ -234,24 +238,55 @@ func captureSnapshotFile(path string) (snapshotFileState, error) {
 	return state, nil
 }
 
-func validateSnapshotAfterState(file SnapshotFile) error {
+func validateSnapshotRollbackState(file SnapshotFile) error {
 	current, err := captureSnapshotFile(file.Path)
 	if err != nil {
 		return err
 	}
-	if current.Exists != file.AfterExists {
-		return fmt.Errorf("snapshot rollback conflict: %s existence changed", file.Path)
-	}
-	if !file.AfterExists {
+
+	if snapshotFileMatchesAfterState(current, file) || snapshotFileMatchesBeforeState(current, file) {
 		return nil
 	}
-	if current.Hash != file.AfterHash {
-		return fmt.Errorf("snapshot rollback conflict: %s content changed", file.Path)
+
+	return fmt.Errorf("snapshot rollback conflict: %s current state does not match snapshot before or after state", file.Path)
+}
+
+func snapshotFileMatchesBeforeState(current snapshotFileState, file SnapshotFile) bool {
+	if current.Exists != file.BeforeExists {
+		return false
 	}
-	if current.Mode != file.AfterMode {
-		return fmt.Errorf("snapshot rollback conflict: %s mode changed", file.Path)
+	if !file.BeforeExists {
+		return true
 	}
-	return nil
+	return current.Hash == file.BeforeHash && current.Mode == file.BeforeMode && current.Size == file.BeforeSize
+}
+
+func snapshotFileMatchesAfterState(current snapshotFileState, file SnapshotFile) bool {
+	if current.Exists != file.AfterExists {
+		return false
+	}
+	if !file.AfterExists {
+		return true
+	}
+	return current.Hash == file.AfterHash && current.Mode == file.AfterMode && current.Size == file.AfterSize
+}
+
+func markSnapshotRollbackError(snapshot *Snapshot, rollbackErr error) error {
+	if snapshot == nil || rollbackErr == nil {
+		return rollbackErr
+	}
+
+	snapshot.State = SnapshotStateActive
+	snapshot.ErrorText = rollbackErr.Error()
+	affected, err := adapter.engine.ID(core.PK{snapshot.Owner, snapshot.Name}).
+		Cols("state", "error_text").Update(snapshot)
+	if err != nil {
+		return fmt.Errorf("%w; failed to update snapshot rollback error: %v", rollbackErr, err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("%w; failed to update snapshot rollback error", rollbackErr)
+	}
+	return rollbackErr
 }
 
 func rollbackSnapshotFile(file SnapshotFile) error {
