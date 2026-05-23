@@ -39,11 +39,42 @@ class SnapshotListPage extends BaseListPage {
     return record.path;
   }
 
+  getActionText(action) {
+    if (action === "write") {
+      return i18next.t("general:Write");
+    }
+    if (action === "move") {
+      return i18next.t("general:Move");
+    }
+    return action;
+  }
+
+  getChangeTypeText(changeType) {
+    if (changeType === "created") {
+      return i18next.t("general:Created");
+    }
+    if (changeType === "deleted") {
+      return i18next.t("general:Deleted");
+    }
+    if (changeType === "modified") {
+      return i18next.t("general:Modified");
+    }
+    return changeType;
+  }
+
+  getStateText(state) {
+    const stateText = state || "Active";
+    if (stateText === "Active" || stateText === "RolledBack") {
+      return i18next.t(`general:${stateText}`);
+    }
+    return stateText;
+  }
+
   getStateTag(state) {
     if (state === "RolledBack") {
-      return <Tag color="blue">RolledBack</Tag>;
+      return <Tag color="blue">{this.getStateText(state)}</Tag>;
     }
-    return <Tag color="green">{state || "Active"}</Tag>;
+    return <Tag color="green">{this.getStateText(state)}</Tag>;
   }
 
   showDetails(record) {
@@ -69,15 +100,15 @@ class SnapshotListPage extends BaseListPage {
       .then((res) => {
         this.setState({rollbackLoadingName: ""});
         if (res.status === "ok") {
-          Setting.showMessage("success", "Snapshot rolled back");
+          Setting.showMessage("success", i18next.t("general:Snapshot rolled back"));
           this.fetch({pagination: this.state.pagination});
         } else {
-          Setting.showMessage("error", `Rollback failed: ${res.msg}`);
+          Setting.showMessage("error", `${i18next.t("general:Rollback failed")}: ${res.msg}`);
         }
       })
       .catch(error => {
         this.setState({rollbackLoadingName: ""});
-        Setting.showMessage("error", `Rollback failed: ${error}`);
+        Setting.showMessage("error", `${i18next.t("general:Rollback failed")}: ${error}`);
       });
   }
 
@@ -85,35 +116,35 @@ class SnapshotListPage extends BaseListPage {
     const snapshot = this.state.detailSnapshot;
     const fileColumns = [
       {
-        title: "Path",
+        title: i18next.t("general:Path"),
         dataIndex: "path",
         key: "path",
         render: (text) => <Typography.Text copyable>{text}</Typography.Text>,
       },
       {
-        title: "Change",
+        title: i18next.t("general:Change"),
         dataIndex: "changeType",
         key: "changeType",
         width: "110px",
-        render: (text) => <Tag>{text}</Tag>,
+        render: (text) => <Tag>{this.getChangeTypeText(text)}</Tag>,
       },
       {
-        title: "Before",
+        title: i18next.t("general:Before"),
         key: "before",
         width: "240px",
-        render: (_, record) => record.beforeExists ? `${record.beforeHash.slice(0, 12)} ${record.beforeMode.toString(8)} ${Setting.getFriendlyFileSize(record.beforeSize)}` : "missing",
+        render: (_, record) => record.beforeExists ? `${record.beforeHash.slice(0, 12)} ${record.beforeMode.toString(8)} ${Setting.getFriendlyFileSize(record.beforeSize)}` : i18next.t("general:Missing"),
       },
       {
-        title: "After",
+        title: i18next.t("general:After"),
         key: "after",
         width: "240px",
-        render: (_, record) => record.afterExists ? `${record.afterHash.slice(0, 12)} ${record.afterMode.toString(8)} ${Setting.getFriendlyFileSize(record.afterSize)}` : "missing",
+        render: (_, record) => record.afterExists ? `${record.afterHash.slice(0, 12)} ${record.afterMode.toString(8)} ${Setting.getFriendlyFileSize(record.afterSize)}` : i18next.t("general:Missing"),
       },
     ];
 
     return (
       <Modal
-        title="Snapshot details"
+        title={i18next.t("general:Snapshot details")}
         open={this.state.detailVisible}
         onCancel={() => this.setState({detailVisible: false, detailSnapshot: null})}
         footer={null}
@@ -154,14 +185,14 @@ class SnapshotListPage extends BaseListPage {
         key: "action",
         width: "100px",
         filters: [
-          {text: "write", value: "write"},
-          {text: "move", value: "move"},
+          {text: i18next.t("general:Write"), value: "write"},
+          {text: i18next.t("general:Move"), value: "move"},
         ],
         onFilter: (value, record) => record.action === value,
-        render: (text) => <Tag>{text}</Tag>,
+        render: (text) => <Tag>{this.getActionText(text)}</Tag>,
       },
       {
-        title: "Path",
+        title: i18next.t("general:Path"),
         key: "path",
         ...this.getColumnSearchProps("path"),
         render: (_, record) => (
@@ -171,7 +202,7 @@ class SnapshotListPage extends BaseListPage {
         ),
       },
       {
-        title: "Files",
+        title: i18next.t("general:Files"),
         key: "files",
         width: "90px",
         render: (_, record) => record.fileCount || 0,
@@ -184,7 +215,7 @@ class SnapshotListPage extends BaseListPage {
         render: (text) => this.getStateTag(text),
       },
       {
-        title: "Error",
+        title: i18next.t("message:Error text"),
         dataIndex: "errorText",
         key: "errorText",
         width: "220px",
@@ -198,17 +229,17 @@ class SnapshotListPage extends BaseListPage {
         fixed: "right",
         render: (_, record) => (
           <div style={{display: "flex", alignItems: "center", gap: "2px", flexWrap: "nowrap"}}>
-            <Tooltip title="Details">
+            <Tooltip title={i18next.t("general:Details")}>
               <Button type="text" size="small" icon={<EyeOutlined />} style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}} onClick={() => this.showDetails(record)} />
             </Tooltip>
             {record.state === "Active" && (
               <Popconfirm
-                title={`Rollback snapshot: ${record.name}?`}
+                title={`${i18next.t("general:Rollback snapshot")}: ${record.name}?`}
                 onConfirm={() => this.rollbackSnapshot(record)}
                 okText={i18next.t("general:OK")}
                 cancelText={i18next.t("general:Cancel")}
               >
-                <Tooltip title="Rollback">
+                <Tooltip title={i18next.t("general:Rollback")}>
                   <Button type="text" size="small" icon={<RollbackOutlined />} loading={this.state.rollbackLoadingName === record.name} style={{minWidth: "28px", width: "28px", height: "28px", padding: 0, borderRadius: "6px"}} />
                 </Tooltip>
               </Popconfirm>
@@ -236,7 +267,7 @@ class SnapshotListPage extends BaseListPage {
           size="middle"
           bordered
           pagination={paginationProps}
-          title={() => <div>Snapshots</div>}
+          title={() => <div>{i18next.t("general:Snapshots")}</div>}
           loading={this.state.loading}
           onChange={this.handleTableChange}
         />
