@@ -56,9 +56,12 @@ func (t *snapshotBuiltinTool) Execute(ctx context.Context, arguments map[string]
 		return t.inner.Execute(ctx, arguments)
 	}
 
+	if err := validateSnapshotToolArguments(t.GetName(), arguments); err != nil {
+		return snapshotToolError(err.Error()), nil
+	}
 	beforeStates, err := captureSnapshotFiles(paths)
 	if err != nil {
-		return nil, err
+		return snapshotToolError(err.Error()), nil
 	}
 
 	result, err := t.inner.Execute(ctx, arguments)
@@ -68,8 +71,7 @@ func (t *snapshotBuiltinTool) Execute(ctx context.Context, arguments map[string]
 
 	afterStates, err := captureSnapshotFiles(paths)
 	if err != nil {
-		fmt.Printf("snapshot capture failed after %s: %s\n", t.GetName(), err.Error())
-		return result, nil
+		return snapshotToolError(fmt.Sprintf("snapshot capture failed after %s: %s; file operation already completed but rollback snapshot was not saved", t.GetName(), err.Error())), nil
 	}
 
 	files := make([]SnapshotFile, 0, len(paths))
@@ -85,11 +87,28 @@ func (t *snapshotBuiltinTool) Execute(ctx context.Context, arguments map[string]
 		return result, nil
 	}
 
-	snapshot := newSnapshot(t.owner, action, path, source, target, files, buildSnapshotDiff(files, beforeStates, afterStates))
-	if _, err = AddSnapshot(snapshot); err != nil {
-		fmt.Printf("snapshot save failed after %s: %s\n", t.GetName(), err.Error())
+	snapshot := newSnapshot(t.owner, action, path, source, target, files, buildSnapshotDiff(files))
+	if ok, err := AddSnapshot(snapshot); err != nil {
+		return snapshotToolError(fmt.Sprintf("snapshot save failed after %s: %s; file operation already completed but rollback snapshot was not saved", t.GetName(), err.Error())), nil
+	} else if !ok {
+		return snapshotToolError(fmt.Sprintf("snapshot save failed after %s: no rows inserted; file operation already completed but rollback snapshot was not saved", t.GetName())), nil
 	}
 	return result, nil
+}
+
+func validateSnapshotToolArguments(toolName string, arguments map[string]interface{}) error {
+	if toolName != "local_file_write" {
+		return nil
+	}
+
+	content, ok := arguments["content"].(string)
+	if !ok {
+		return nil
+	}
+	if int64(len(content)) > snapshotMaxFileBytes {
+		return fmt.Errorf("snapshot file exceeds %d bytes", snapshotMaxFileBytes)
+	}
+	return nil
 }
 
 func getSnapshotToolPaths(toolName string, arguments map[string]interface{}) (string, string, string, string, []string) {
@@ -143,4 +162,13 @@ func captureSnapshotFiles(paths []string) (map[string]snapshotFileState, error) 
 		res[p] = state
 	}
 	return res, nil
+}
+
+func snapshotToolError(text string) *protocol.CallToolResult {
+	return &protocol.CallToolResult{
+		IsError: true,
+		Content: []protocol.Content{
+			&protocol.TextContent{Type: "text", Text: text},
+		},
+	}
 }

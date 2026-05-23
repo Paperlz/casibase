@@ -100,14 +100,14 @@ class SnapshotListPage extends BaseListPage {
       {
         title: "Before",
         key: "before",
-        width: "180px",
-        render: (_, record) => record.beforeExists ? `${record.beforeHash.slice(0, 12)} ${record.beforeMode.toString(8)}` : "missing",
+        width: "240px",
+        render: (_, record) => record.beforeExists ? `${record.beforeHash.slice(0, 12)} ${record.beforeMode.toString(8)} ${Setting.getFriendlyFileSize(record.beforeSize)}` : "missing",
       },
       {
         title: "After",
         key: "after",
-        width: "180px",
-        render: (_, record) => record.afterExists ? `${record.afterHash.slice(0, 12)} ${record.afterMode.toString(8)}` : "missing",
+        width: "240px",
+        render: (_, record) => record.afterExists ? `${record.afterHash.slice(0, 12)} ${record.afterMode.toString(8)} ${Setting.getFriendlyFileSize(record.afterSize)}` : "missing",
       },
     ];
 
@@ -174,7 +174,7 @@ class SnapshotListPage extends BaseListPage {
         title: "Files",
         key: "files",
         width: "90px",
-        render: (_, record) => record.files?.length || 0,
+        render: (_, record) => record.fileCount || 0,
       },
       {
         title: i18next.t("general:State"),

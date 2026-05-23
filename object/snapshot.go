@@ -22,7 +22,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
@@ -31,7 +30,14 @@ import (
 const (
 	SnapshotStateActive     = "Active"
 	SnapshotStateRolledBack = "RolledBack"
+
+	snapshotMaxFileBytes = 5 * 1024 * 1024
 )
+
+var snapshotListColumns = []string{
+	"owner", "name", "created_time", "tool", "action", "path",
+	"source", "target", "file_count", "state", "error_text", "rolled_back_time",
+}
 
 type Snapshot struct {
 	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
@@ -44,6 +50,7 @@ type Snapshot struct {
 	Source         string         `xorm:"varchar(1000)" json:"source"`
 	Target         string         `xorm:"varchar(1000)" json:"target"`
 	Files          []SnapshotFile `xorm:"mediumtext" json:"files"`
+	FileCount      int            `xorm:"int" json:"fileCount"`
 	Diff           string         `xorm:"mediumtext" json:"diff"`
 	State          string         `xorm:"varchar(100)" json:"state"`
 	ErrorText      string         `xorm:"mediumtext" json:"errorText"`
@@ -57,9 +64,11 @@ type SnapshotFile struct {
 	BeforeHash    string `json:"beforeHash"`
 	BeforeContent string `json:"beforeContent,omitempty"`
 	BeforeMode    int64  `json:"beforeMode"`
+	BeforeSize    int64  `json:"beforeSize"`
 	AfterExists   bool   `json:"afterExists"`
 	AfterHash     string `json:"afterHash"`
 	AfterMode     int64  `json:"afterMode"`
+	AfterSize     int64  `json:"afterSize"`
 }
 
 type snapshotFileState struct {
@@ -68,6 +77,7 @@ type snapshotFileState struct {
 	Hash    string
 	Content []byte
 	Mode    int64
+	Size    int64
 }
 
 func AddSnapshot(snapshot *Snapshot) (bool, error) {
@@ -99,17 +109,17 @@ func GetSnapshot(id string) (*Snapshot, error) {
 	if err != nil || snapshot == nil {
 		return snapshot, err
 	}
-	clearSnapshotBeforeContent(snapshot)
+	prepareSnapshotForDetail(snapshot)
 	return snapshot, nil
 }
 
 func GetSnapshots(owner string) ([]*Snapshot, error) {
 	snapshots := []*Snapshot{}
-	err := adapter.engine.Desc("created_time").Find(&snapshots, &Snapshot{Owner: owner})
+	err := adapter.engine.Desc("created_time").Cols(snapshotListColumns...).Find(&snapshots, &Snapshot{Owner: owner})
 	if err != nil {
 		return snapshots, err
 	}
-	clearSnapshotsBeforeContent(snapshots)
+	clearSnapshotsForList(snapshots)
 	return snapshots, nil
 }
 
@@ -121,11 +131,11 @@ func GetSnapshotCount(owner, field, value string) (int64, error) {
 func GetPaginationSnapshots(owner string, offset, limit int, field, value, sortField, sortOrder string) ([]*Snapshot, error) {
 	snapshots := []*Snapshot{}
 	session := GetDbSession(owner, offset, limit, field, value, sortField, sortOrder)
-	err := session.Find(&snapshots)
+	err := session.Cols(snapshotListColumns...).Find(&snapshots)
 	if err != nil {
 		return snapshots, err
 	}
-	clearSnapshotsBeforeContent(snapshots)
+	clearSnapshotsForList(snapshots)
 	return snapshots, nil
 }
 
@@ -168,10 +178,19 @@ func RollbackSnapshot(id string) (bool, error) {
 	return affected != 0, nil
 }
 
-func clearSnapshotsBeforeContent(snapshots []*Snapshot) {
+func clearSnapshotsForList(snapshots []*Snapshot) {
 	for _, snapshot := range snapshots {
-		clearSnapshotBeforeContent(snapshot)
+		if snapshot.FileCount == 0 && len(snapshot.Files) != 0 {
+			snapshot.FileCount = len(snapshot.Files)
+		}
+		snapshot.Files = nil
+		snapshot.Diff = ""
 	}
+}
+
+func prepareSnapshotForDetail(snapshot *Snapshot) {
+	snapshot.Diff = buildSnapshotDiff(snapshot.Files)
+	clearSnapshotBeforeContent(snapshot)
 }
 
 func clearSnapshotBeforeContent(snapshot *Snapshot) {
@@ -182,7 +201,7 @@ func clearSnapshotBeforeContent(snapshot *Snapshot) {
 
 func captureSnapshotFile(path string) (snapshotFileState, error) {
 	state := snapshotFileState{Path: filepath.Clean(path)}
-	info, err := os.Stat(state.Path)
+	info, err := os.Lstat(state.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return state, nil
@@ -192,13 +211,24 @@ func captureSnapshotFile(path string) (snapshotFileState, error) {
 
 	state.Exists = true
 	state.Mode = int64(info.Mode().Perm())
-	if info.IsDir() {
-		return state, nil
+	state.Size = info.Size()
+	if info.Mode()&os.ModeSymlink != 0 {
+		return state, fmt.Errorf("snapshot does not support symlink: %s", state.Path)
+	}
+	if !info.Mode().IsRegular() {
+		return state, fmt.Errorf("snapshot only supports regular files: %s", state.Path)
+	}
+	if state.Size > snapshotMaxFileBytes {
+		return state, fmt.Errorf("snapshot file exceeds %d bytes: %s", snapshotMaxFileBytes, state.Path)
 	}
 
 	state.Content, err = os.ReadFile(state.Path)
 	if err != nil {
 		return state, err
+	}
+	state.Size = int64(len(state.Content))
+	if state.Size > snapshotMaxFileBytes {
+		return state, fmt.Errorf("snapshot file exceeds %d bytes: %s", snapshotMaxFileBytes, state.Path)
 	}
 	state.Hash = hashSnapshotContent(state.Content)
 	return state, nil
@@ -226,7 +256,7 @@ func validateSnapshotAfterState(file SnapshotFile) error {
 
 func rollbackSnapshotFile(file SnapshotFile) error {
 	if !file.BeforeExists {
-		if _, err := os.Stat(file.Path); err == nil {
+		if _, err := os.Lstat(file.Path); err == nil {
 			return os.Remove(file.Path)
 		} else if os.IsNotExist(err) {
 			return nil
@@ -263,6 +293,7 @@ func newSnapshot(owner string, action string, path string, source string, target
 		Source:      source,
 		Target:      target,
 		Files:       files,
+		FileCount:   len(files),
 		Diff:        diff,
 		State:       SnapshotStateActive,
 	}
@@ -276,9 +307,11 @@ func makeSnapshotFile(before snapshotFileState, after snapshotFileState) Snapsho
 		BeforeHash:    before.Hash,
 		BeforeContent: base64.StdEncoding.EncodeToString(before.Content),
 		BeforeMode:    before.Mode,
+		BeforeSize:    before.Size,
 		AfterExists:   after.Exists,
 		AfterHash:     after.Hash,
 		AfterMode:     after.Mode,
+		AfterSize:     after.Size,
 	}
 }
 
@@ -304,47 +337,21 @@ func hashSnapshotContent(content []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func buildSnapshotDiff(files []SnapshotFile, beforeStates map[string]snapshotFileState, afterStates map[string]snapshotFileState) string {
+func buildSnapshotDiff(files []SnapshotFile) string {
 	var builder strings.Builder
 	for _, file := range files {
-		before := beforeStates[file.Path]
-		after := afterStates[file.Path]
-		builder.WriteString(fmt.Sprintf("--- %s\n", file.Path))
-		builder.WriteString(fmt.Sprintf("+++ %s\n", file.Path))
-		builder.WriteString(fmt.Sprintf("@@ %s @@\n", file.ChangeType))
-		if before.Exists && after.Exists && utf8.Valid(before.Content) && utf8.Valid(after.Content) {
-			appendLineDiff(&builder, string(before.Content), string(after.Content))
-		} else if before.Exists && !after.Exists {
-			builder.WriteString("- file deleted\n")
-		} else if !before.Exists && after.Exists {
-			builder.WriteString("+ file created\n")
-		} else {
-			builder.WriteString("binary or unreadable file changed\n")
-		}
+		builder.WriteString(fmt.Sprintf("%s %s\n", file.ChangeType, file.Path))
+		appendSnapshotStateSummary(&builder, "before", file.BeforeExists, file.BeforeSize, file.BeforeMode, file.BeforeHash)
+		appendSnapshotStateSummary(&builder, "after", file.AfterExists, file.AfterSize, file.AfterMode, file.AfterHash)
 		builder.WriteString("\n")
 	}
 	return builder.String()
 }
 
-func appendLineDiff(builder *strings.Builder, before string, after string) {
-	if before == after {
-		builder.WriteString(" file unchanged\n")
+func appendSnapshotStateSummary(builder *strings.Builder, label string, exists bool, size int64, mode int64, hash string) {
+	if !exists {
+		builder.WriteString(fmt.Sprintf("%s: missing\n", label))
 		return
 	}
-	beforeLines := strings.Split(strings.TrimSuffix(before, "\n"), "\n")
-	afterLines := strings.Split(strings.TrimSuffix(after, "\n"), "\n")
-	for _, line := range beforeLines {
-		if line != "" {
-			builder.WriteString("- ")
-			builder.WriteString(line)
-			builder.WriteString("\n")
-		}
-	}
-	for _, line := range afterLines {
-		if line != "" {
-			builder.WriteString("+ ")
-			builder.WriteString(line)
-			builder.WriteString("\n")
-		}
-	}
+	builder.WriteString(fmt.Sprintf("%s: size=%d mode=%04o hash=%s\n", label, size, mode, hash))
 }
