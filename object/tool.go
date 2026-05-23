@@ -240,7 +240,7 @@ func testToolWithLoader(t *Tool, lang string, loadTool func(owner string, name s
 	}
 	for _, bt := range tp.BuiltinTools() {
 		if bt.GetName() == payload.Tool {
-			foundTool = bt
+			foundTool = wrapSnapshotBuiltin("admin", bt)
 			break
 		}
 	}
