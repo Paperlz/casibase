@@ -285,8 +285,7 @@ class SnapshotListPage extends BaseListPage {
       searchedColumn: field,
       searchText: value,
     });
-    const owner = Setting.getRequestOrganization(this.props.account);
-    SnapshotBackend.getSnapshots(owner, pagination.current, pagination.pageSize, field, value, params.sortField || "", params.sortOrder || "")
+    SnapshotBackend.getSnapshots("admin", pagination.current, pagination.pageSize, field, value, params.sortField || "", params.sortOrder || "")
       .then((res) => {
         if (res.status === "ok") {
           this.setState({

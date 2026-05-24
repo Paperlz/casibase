@@ -364,11 +364,16 @@ function ManagementPage(props) {
       return menuItems;
     }
 
+    const effectiveNavItems = new Set(navItems);
+    if (effectiveNavItems.has("/records") || effectiveNavItems.has("/sessions") || effectiveNavItems.has("/logs")) {
+      effectiveNavItems.add("/snapshots");
+    }
+
     const filteredItems = menuItems.map(item => {
       if (!Array.isArray(item.children)) {
         return item;
       }
-      const filteredChildren = item.children.filter(child => navItems.includes(child.key));
+      const filteredChildren = item.children.filter(child => effectiveNavItems.has(child.key));
       const newItem = {...item};
       newItem.children = filteredChildren;
       return newItem;
@@ -378,7 +383,7 @@ function ManagementPage(props) {
       if (Array.isArray(item.children)) {
         return item.children.length > 0;
       }
-      return item.key === "/" || navItems.includes(item.key);
+      return item.key === "/" || effectiveNavItems.has(item.key);
     });
   }
 
