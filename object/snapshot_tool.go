@@ -64,14 +64,11 @@ func (t *snapshotBuiltinTool) Execute(ctx context.Context, arguments map[string]
 		return snapshotToolError(err.Error()), nil
 	}
 
-	result, err := t.inner.Execute(ctx, arguments)
-	if err != nil || result == nil || result.IsError {
-		return result, err
-	}
+	result, innerErr := t.inner.Execute(ctx, arguments)
 
 	afterStates, err := captureSnapshotFiles(paths)
 	if err != nil {
-		return snapshotToolError(fmt.Sprintf("snapshot capture failed after %s: %s; file operation already completed but rollback snapshot was not saved", t.GetName(), err.Error())), nil
+		return snapshotToolError(snapshotToolFailureMessage("snapshot capture failed", t.GetName(), err, result, innerErr)), nil
 	}
 
 	files := make([]SnapshotFile, 0, len(paths))
@@ -84,16 +81,16 @@ func (t *snapshotBuiltinTool) Execute(ctx context.Context, arguments map[string]
 		files = append(files, makeSnapshotFile(before, after))
 	}
 	if len(files) == 0 {
-		return result, nil
+		return result, innerErr
 	}
 
 	snapshot := newSnapshot(t.owner, action, path, source, target, files, buildSnapshotDiff(files))
 	if ok, err := AddSnapshot(snapshot); err != nil {
-		return snapshotToolError(fmt.Sprintf("snapshot save failed after %s: %s; file operation already completed but rollback snapshot was not saved", t.GetName(), err.Error())), nil
+		return snapshotToolError(snapshotToolFailureMessage("snapshot save failed", t.GetName(), err, result, innerErr)), nil
 	} else if !ok {
-		return snapshotToolError(fmt.Sprintf("snapshot save failed after %s: no rows inserted; file operation already completed but rollback snapshot was not saved", t.GetName())), nil
+		return snapshotToolError(snapshotToolFailureMessage("snapshot save failed", t.GetName(), fmt.Errorf("no rows inserted"), result, innerErr)), nil
 	}
-	return result, nil
+	return result, innerErr
 }
 
 func validateSnapshotToolArguments(toolName string, arguments map[string]interface{}) error {
@@ -162,6 +159,35 @@ func captureSnapshotFiles(paths []string) (map[string]snapshotFileState, error) 
 		res[p] = state
 	}
 	return res, nil
+}
+
+func snapshotToolFailureMessage(prefix string, toolName string, cause error, result *protocol.CallToolResult, innerErr error) string {
+	message := fmt.Sprintf("%s after %s: %s; file operation already changed files but rollback snapshot was not saved", prefix, toolName, cause.Error())
+	if innerText := snapshotInnerErrorText(result, innerErr); innerText != "" {
+		message = fmt.Sprintf("%s; original tool error: %s", message, innerText)
+	}
+	return message
+}
+
+func snapshotInnerErrorText(result *protocol.CallToolResult, err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	if result == nil {
+		return "inner tool returned nil result"
+	}
+	if !result.IsError {
+		return ""
+	}
+
+	parts := []string{}
+	for _, content := range result.Content {
+		text, ok := content.(*protocol.TextContent)
+		if ok && text.Text != "" {
+			parts = append(parts, text.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 func snapshotToolError(text string) *protocol.CallToolResult {
