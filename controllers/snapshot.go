@@ -15,6 +15,8 @@
 package controllers
 
 import (
+	"strings"
+
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
 	"github.com/the-open-agent/openagent/util"
@@ -31,7 +33,11 @@ func (c *ApiController) GetSnapshots() {
 		return
 	}
 
-	owner := "admin"
+	owner := strings.TrimSpace(c.Input().Get("owner"))
+	if owner == "" {
+		c.ResponseError("owner is required")
+		return
+	}
 	limit := c.Input().Get("pageSize")
 	page := c.Input().Get("p")
 	field := c.Input().Get("field")
