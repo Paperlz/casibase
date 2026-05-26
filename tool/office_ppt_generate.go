@@ -80,6 +80,8 @@ func (t *pptxGenerateBuiltin) GetInputSchema() interface{} {
 	}
 }
 
+// Execute validates the requested deck generation job, writes a short-lived
+// worker spec file, then runs the local Node/PptxGenJS worker.
 func (t *pptxGenerateBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
 	argBytes, err := json.Marshal(arguments)
 	if err != nil {
@@ -96,6 +98,8 @@ func (t *pptxGenerateBuiltin) Execute(ctx context.Context, arguments map[string]
 		return officeToolError("Missing required parameter: path"), nil
 	}
 
+	// The build script is user/agent-authored PptxGenJS code. This tool only
+	// validates and runs it; it does not generate the script itself.
 	args.ScriptPath = strings.TrimSpace(args.ScriptPath)
 	if args.ScriptPath == "" {
 		return officeToolError("Missing required parameter: script_path"), nil
@@ -133,41 +137,15 @@ func (t *pptxGenerateBuiltin) Execute(ctx context.Context, arguments map[string]
 		}
 	}
 
-	workerPath := strings.TrimSpace(os.Getenv("OPENAGENT_PPTX_WORKER"))
-	if workerPath != "" {
-		if !filepath.IsAbs(workerPath) {
-			workerPath, err = filepath.Abs(workerPath)
-			if err != nil {
-				return officeToolError(fmt.Sprintf("Invalid OPENAGENT_PPTX_WORKER: %s", err.Error())), nil
-			}
-		}
-		workerInfo, err := os.Stat(workerPath)
-		if err != nil {
-			return officeToolError(fmt.Sprintf("Invalid OPENAGENT_PPTX_WORKER: %s", err.Error())), nil
-		}
-		if workerInfo.IsDir() {
-			return officeToolError("Invalid OPENAGENT_PPTX_WORKER: must be a file"), nil
-		}
-	} else {
-		for _, candidate := range []string{
-			filepath.Join("tool", "pptx-worker", "worker.mjs"),
-			filepath.Join("pptx-worker", "worker.mjs"),
-		} {
-			if _, err := os.Stat(candidate); err == nil {
-				workerPath, err = filepath.Abs(candidate)
-				if err != nil {
-					workerPath = candidate
-				}
-				break
-			}
-		}
-		if workerPath == "" {
-			return officeToolError("PowerPoint worker not found: tool/pptx-worker/worker.mjs"), nil
-		}
+	workerPath, err := findPptxWorkerPath()
+	if err != nil {
+		return officeToolError(err.Error()), nil
 	}
 
 	args.Path = resolveOutputPath(args.Path)
 
+	// Pass the job to Node through a temp JSON file so nested data does not
+	// need fragile command-line escaping. The final PPTX is not temporary.
 	specFile, err := os.CreateTemp("", "openagent-pptxgenjs-*.json")
 	if err != nil {
 		return officeToolError(fmt.Sprintf("Failed to create worker spec: %s", err.Error())), nil
@@ -184,6 +162,7 @@ func (t *pptxGenerateBuiltin) Execute(ctx context.Context, arguments map[string]
 
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "node", workerPath, specFile.Name())
+	// Run from the worker directory so Node can resolve its local node_modules.
 	cmd.Dir = filepath.Dir(workerPath)
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
@@ -216,4 +195,54 @@ func (t *pptxGenerateBuiltin) Execute(ctx context.Context, arguments map[string]
 		"Successfully generated PowerPoint file: %s\n%d slide(s) written\nmode: %s",
 		workerResult.Path, workerResult.SlideCount, mode,
 	)), nil
+}
+
+func findPptxWorkerPath() (string, error) {
+	workerPath := strings.TrimSpace(os.Getenv("OPENAGENT_PPTX_WORKER"))
+	if workerPath != "" {
+		if !filepath.IsAbs(workerPath) {
+			absPath, err := filepath.Abs(workerPath)
+			if err != nil {
+				return "", fmt.Errorf("Invalid OPENAGENT_PPTX_WORKER: %s", err.Error())
+			}
+			workerPath = absPath
+		}
+		workerInfo, err := os.Stat(workerPath)
+		if err != nil {
+			return "", fmt.Errorf("Invalid OPENAGENT_PPTX_WORKER: %s", err.Error())
+		}
+		if workerInfo.IsDir() {
+			return "", fmt.Errorf("Invalid OPENAGENT_PPTX_WORKER: must be a file")
+		}
+		return workerPath, nil
+	}
+
+	candidates := []string{
+		filepath.Join("tool", "pptx-worker", "worker.mjs"),
+		filepath.Join("pptx-worker", "worker.mjs"),
+	}
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "tool", "pptx-worker", "worker.mjs"),
+			filepath.Join(exeDir, "pptx-worker", "worker.mjs"),
+		)
+	}
+
+	for _, candidate := range candidates {
+		workerInfo, err := os.Stat(candidate)
+		if err != nil {
+			continue
+		}
+		if workerInfo.IsDir() {
+			continue
+		}
+		absPath, err := filepath.Abs(candidate)
+		if err != nil {
+			return candidate, nil
+		}
+		return absPath, nil
+	}
+
+	return "", fmt.Errorf("PowerPoint worker not found: tool/pptx-worker/worker.mjs")
 }
