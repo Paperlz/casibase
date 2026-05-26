@@ -1,0 +1,16 @@
+{
+  "name": "@openagent/pptx-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@fortawesome/free-solid-svg-icons": "6.7.2",
+    "pptxgenjs": "4.0.1"
+  },
+  "devDependencies": {
+    "jszip": "3.10.1"
+  }
+}

@@ -1278,13 +1278,14 @@ export function getProviderSubTypeOptions(category, type) {
       ];
     } else if (type === "office") {
       return [
-        {id: "All", name: "All"},
-        {id: "Word Read", name: "Word Read"},
-        {id: "Word Write", name: "Word Write"},
-        {id: "Excel Read", name: "Excel Read"},
-        {id: "Excel Write", name: "Excel Write"},
-        {id: "PowerPoint Read", name: "PowerPoint Read"},
-        {id: "PowerPoint Write", name: "PowerPoint Write"},
+        {id: "All", name: i18next.t("store:All")},
+        {id: "Word Read", name: `${i18next.t("tool:Word")} ${i18next.t("store:Read")}`},
+        {id: "Word Write", name: `${i18next.t("tool:Word")} ${i18next.t("store:Write")}`},
+        {id: "Excel Read", name: `${i18next.t("tool:Excel")} ${i18next.t("store:Read")}`},
+        {id: "Excel Write", name: `${i18next.t("tool:Excel")} ${i18next.t("store:Write")}`},
+        {id: "PowerPoint Read", name: `${i18next.t("tool:PowerPoint")} ${i18next.t("store:Read")}`},
+        {id: "PowerPoint Write", name: `${i18next.t("tool:PowerPoint")} ${i18next.t("store:Write")}`},
+        {id: "PowerPoint Generate", name: `${i18next.t("tool:PowerPoint")} ${i18next.t("tool:Generate")}`},
       ];
     } else if (type === "web_fetch") {
       return [
