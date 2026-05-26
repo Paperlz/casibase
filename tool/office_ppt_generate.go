@@ -19,12 +19,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
+	"github.com/the-open-agent/openagent/embedsupport"
 )
 
 type pptxGenerateBuiltin struct{}
@@ -42,6 +44,11 @@ type pptxGenerateWorkerResult struct {
 	SlideCount int    `json:"slideCount"`
 	Mode       string `json:"mode"`
 	Error      string `json:"error"`
+}
+
+type pptxWorkerCandidate struct {
+	path               string
+	requireNodeModules bool
 }
 
 func (t *pptxGenerateBuiltin) GetName() string { return "pptx_generate" }
@@ -137,6 +144,10 @@ func (t *pptxGenerateBuiltin) Execute(ctx context.Context, arguments map[string]
 		}
 	}
 
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		return officeToolError("Node.js was not found; install Node.js to enable PowerPoint generation"), nil
+	}
 	workerPath, err := findPptxWorkerPath()
 	if err != nil {
 		return officeToolError(err.Error()), nil
@@ -161,8 +172,9 @@ func (t *pptxGenerateBuiltin) Execute(ctx context.Context, arguments map[string]
 	}
 
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "node", workerPath, specFile.Name())
-	// Run from the worker directory so Node can resolve its local node_modules.
+	cmd := exec.CommandContext(ctx, nodePath, workerPath, specFile.Name())
+	// Run from the worker directory so source workers can resolve local node_modules.
+	// Bundled and embedded workers do not need node_modules at runtime.
 	cmd.Dir = filepath.Dir(workerPath)
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
@@ -198,51 +210,88 @@ func (t *pptxGenerateBuiltin) Execute(ctx context.Context, arguments map[string]
 }
 
 func findPptxWorkerPath() (string, error) {
-	workerPath := strings.TrimSpace(os.Getenv("OPENAGENT_PPTX_WORKER"))
-	if workerPath != "" {
-		if !filepath.IsAbs(workerPath) {
-			absPath, err := filepath.Abs(workerPath)
-			if err != nil {
-				return "", fmt.Errorf("Invalid OPENAGENT_PPTX_WORKER: %s", err.Error())
-			}
-			workerPath = absPath
-		}
-		workerInfo, err := os.Stat(workerPath)
-		if err != nil {
-			return "", fmt.Errorf("Invalid OPENAGENT_PPTX_WORKER: %s", err.Error())
-		}
-		if workerInfo.IsDir() {
-			return "", fmt.Errorf("Invalid OPENAGENT_PPTX_WORKER: must be a file")
-		}
-		return workerPath, nil
-	}
-
-	candidates := []string{
-		filepath.Join("tool", "pptx-worker", "worker.mjs"),
-		filepath.Join("pptx-worker", "worker.mjs"),
-	}
-	if exePath, err := os.Executable(); err == nil {
-		exeDir := filepath.Dir(exePath)
+	var candidates []pptxWorkerCandidate
+	if exeDir, err := pptxExecutableDir(); err == nil {
 		candidates = append(candidates,
-			filepath.Join(exeDir, "tool", "pptx-worker", "worker.mjs"),
-			filepath.Join(exeDir, "pptx-worker", "worker.mjs"),
+			pptxWorkerCandidate{path: filepath.Join(exeDir, "pptx-worker", "worker.bundle.mjs")},
+			pptxWorkerCandidate{path: filepath.Join(exeDir, "pptx-worker", "worker.mjs")},
 		)
 	}
+	candidates = append(candidates,
+		pptxWorkerCandidate{path: filepath.Join("tool", "pptx-worker", "worker.mjs"), requireNodeModules: true},
+		pptxWorkerCandidate{path: filepath.Join("pptx-worker", "worker.mjs"), requireNodeModules: true},
+		pptxWorkerCandidate{path: filepath.Join("tool", "pptx-worker", "worker.bundle.mjs")},
+		pptxWorkerCandidate{path: filepath.Join("pptx-worker", "worker.bundle.mjs")},
+	)
 
 	for _, candidate := range candidates {
-		workerInfo, err := os.Stat(candidate)
+		workerInfo, err := os.Stat(candidate.path)
 		if err != nil {
 			continue
 		}
 		if workerInfo.IsDir() {
 			continue
 		}
-		absPath, err := filepath.Abs(candidate)
+		absPath, err := filepath.Abs(candidate.path)
 		if err != nil {
-			return candidate, nil
+			absPath = candidate.path
+		}
+		if candidate.requireNodeModules && !sourcePptxWorkerReady(absPath) {
+			continue
 		}
 		return absPath, nil
 	}
 
-	return "", fmt.Errorf("PowerPoint worker not found: tool/pptx-worker/worker.mjs")
+	embeddedWorker := embedsupport.PptxWorkerFS()
+	if embeddedWorker != nil {
+		exeDir, err := pptxExecutableDir()
+		if err != nil {
+			return "", err
+		}
+		return writeEmbeddedPptxWorker(embeddedWorker, exeDir)
+	}
+
+	return "", fmt.Errorf("PowerPoint worker not found next to the executable or in tool/pptx-worker; build with -tags embed or place worker.bundle.mjs or worker.mjs in pptx-worker")
+}
+
+func sourcePptxWorkerReady(workerPath string) bool {
+	workerDir := filepath.Dir(workerPath)
+	for _, dep := range []string{
+		filepath.Join("node_modules", "pptxgenjs"),
+		filepath.Join("node_modules", "@fortawesome", "free-solid-svg-icons"),
+	} {
+		info, err := os.Stat(filepath.Join(workerDir, dep))
+		if err != nil || !info.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
+func writeEmbeddedPptxWorker(source fs.FS, rootDir string) (string, error) {
+	data, err := fs.ReadFile(source, "worker.bundle.mjs")
+	if err != nil {
+		return "", fmt.Errorf("Failed to read embedded PowerPoint worker: %s", err.Error())
+	}
+
+	workerPath := filepath.Join(rootDir, "pptx-worker", "worker.mjs")
+	if err = os.MkdirAll(filepath.Dir(workerPath), 0o755); err != nil {
+		return "", fmt.Errorf("Failed to prepare embedded PowerPoint worker: %s", err.Error())
+	}
+	if err = os.WriteFile(workerPath, data, 0o644); err != nil {
+		return "", fmt.Errorf("Failed to write embedded PowerPoint worker: %s", err.Error())
+	}
+	return workerPath, nil
+}
+
+func pptxExecutableDir() (string, error) {
+	exePath, err := os.Executable()
+	if err == nil {
+		return filepath.Dir(exePath), nil
+	}
+	wd, wdErr := os.Getwd()
+	if wdErr != nil {
+		return "", err
+	}
+	return wd, nil
 }
