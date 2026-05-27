@@ -148,7 +148,7 @@ func (t *pptxGenerateBuiltin) Execute(ctx context.Context, arguments map[string]
 	if err != nil {
 		return officeToolError("Node.js was not found; install Node.js to enable PowerPoint generation"), nil
 	}
-	workerPath, err := findPptxWorkerPath()
+	workerPath, err := findPptxWorkerPath(ctx)
 	if err != nil {
 		return officeToolError(err.Error()), nil
 	}
@@ -209,7 +209,7 @@ func (t *pptxGenerateBuiltin) Execute(ctx context.Context, arguments map[string]
 	)), nil
 }
 
-func findPptxWorkerPath() (string, error) {
+func findPptxWorkerPath(ctx context.Context) (string, error) {
 	var candidates []pptxWorkerCandidate
 	if exeDir, err := pptxExecutableDir(); err == nil {
 		candidates = append(candidates,
@@ -236,8 +236,10 @@ func findPptxWorkerPath() (string, error) {
 		if err != nil {
 			absPath = candidate.path
 		}
-		if candidate.requireNodeModules && !sourcePptxWorkerReady(absPath) {
-			continue
+		if candidate.requireNodeModules {
+			if err := ensureSourcePptxWorkerReady(ctx, absPath); err != nil {
+				return "", err
+			}
 		}
 		return absPath, nil
 	}
@@ -252,6 +254,34 @@ func findPptxWorkerPath() (string, error) {
 	}
 
 	return "", fmt.Errorf("PowerPoint worker not found next to the executable or in tool/pptx-worker; build with -tags embed or place worker.bundle.mjs or worker.mjs in pptx-worker")
+}
+
+func ensureSourcePptxWorkerReady(ctx context.Context, workerPath string) error {
+	if sourcePptxWorkerReady(workerPath) {
+		return nil
+	}
+
+	npmPath, err := exec.LookPath("npm")
+	if err != nil {
+		return fmt.Errorf("npm was not found; run npm ci --prefix tool/pptx-worker or install npm")
+	}
+
+	workerDir := filepath.Dir(workerPath)
+	cmd := exec.CommandContext(ctx, npmPath, "ci")
+	cmd.Dir = workerDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		detail := strings.TrimSpace(string(output))
+		if detail == "" {
+			detail = err.Error()
+		}
+		return fmt.Errorf("Failed to install PowerPoint worker dependencies with npm ci in %s: %s", workerDir, detail)
+	}
+
+	if !sourcePptxWorkerReady(workerPath) {
+		return fmt.Errorf("PowerPoint worker dependencies are still missing after npm ci in %s", workerDir)
+	}
+	return nil
 }
 
 func sourcePptxWorkerReady(workerPath string) bool {
