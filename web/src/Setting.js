@@ -517,13 +517,13 @@ export function getToolFunctions(tool) {
   }
   if (type === "office") {
     const allOffice = [
-      {name: "word_read", description: i18next.t("tool:Read content from a Word document"), testContent: JSON.stringify({tool: "word_read", arguments: {path: "/path/to/document.docx"}}, null, 2)},
-      {name: "word_write", description: i18next.t("tool:Write content to a Word document"), testContent: JSON.stringify({tool: "word_write", arguments: {path: "/path/to/output.docx", content: "Hello, World!\nThis is a new paragraph."}}, null, 2)},
-      {name: "excel_read", description: i18next.t("tool:Read data from an Excel spreadsheet"), testContent: JSON.stringify({tool: "excel_read", arguments: {path: "/path/to/spreadsheet.xlsx", sheet: "Sheet1"}}, null, 2)},
-      {name: "excel_write", description: i18next.t("tool:Write data to an Excel spreadsheet"), testContent: JSON.stringify({tool: "excel_write", arguments: {path: "/path/to/output.xlsx", data: "Name,Age\nAlice,30\nBob,25", sheet: "Sheet1"}}, null, 2)},
-      {name: "pptx_read", description: i18next.t("tool:Read content from a PowerPoint presentation"), testContent: JSON.stringify({tool: "pptx_read", arguments: {path: "/path/to/presentation.pptx"}}, null, 2)},
-      {name: "pptx_write", description: i18next.t("tool:Write content to a PowerPoint presentation"), testContent: JSON.stringify({tool: "pptx_write", arguments: {path: "/path/to/output.pptx", slides: ["Slide 1 title\nSlide 1 content", "Slide 2 title\nSlide 2 content"]}}, null, 2)},
-      {name: "pptx_generate", description: i18next.t("tool:Generate a PowerPoint presentation by running a local PptxGenJS script"), testContent: JSON.stringify({tool: "pptx_generate", arguments: {path: "deck.pptx", script_path: "/path/to/build_deck.mjs", data: {title: "Quarterly Review"}, assets_dir: "/path/to/assets"}}, null, 2)},
+      {name: "word_read", description: "Read content from a Word document", testContent: JSON.stringify({tool: "word_read", arguments: {path: "/path/to/document.docx"}}, null, 2)},
+      {name: "word_write", description: "Write content to a Word document", testContent: JSON.stringify({tool: "word_write", arguments: {path: "/path/to/output.docx", content: "Hello, World!\nThis is a new paragraph."}}, null, 2)},
+      {name: "excel_read", description: "Read data from an Excel spreadsheet", testContent: JSON.stringify({tool: "excel_read", arguments: {path: "/path/to/spreadsheet.xlsx", sheet: "Sheet1"}}, null, 2)},
+      {name: "excel_write", description: "Write data to an Excel spreadsheet", testContent: JSON.stringify({tool: "excel_write", arguments: {path: "/path/to/output.xlsx", data: "Name,Age\nAlice,30\nBob,25", sheet: "Sheet1"}}, null, 2)},
+      {name: "pptx_read", description: "Read content from a PowerPoint presentation", testContent: JSON.stringify({tool: "pptx_read", arguments: {path: "/path/to/presentation.pptx"}}, null, 2)},
+      {name: "pptx_write", description: "Write content to a PowerPoint presentation", testContent: JSON.stringify({tool: "pptx_write", arguments: {path: "/path/to/output.pptx", slides: ["Slide 1 title\nSlide 1 content", "Slide 2 title\nSlide 2 content"]}}, null, 2)},
+      {name: "pptx_generate", description: "Generate a PowerPoint presentation by running a local PptxGenJS script", testContent: JSON.stringify({tool: "pptx_generate", arguments: {path: "deck.pptx", script_path: "/path/to/build_deck.mjs", data: {title: "Quarterly Review"}, assets_dir: "/path/to/assets"}}, null, 2)},
     ];
     const subTypeMap = {
       "Word Read": [allOffice[0]],

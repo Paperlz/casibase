@@ -122,11 +122,6 @@ function createPresentation() {
   pptx.author = 'OpenAgent';
   pptx.company = 'OpenAgent';
   pptx.subject = 'Generated with OpenAgent';
-  pptx.theme = {
-    headFontFace: 'Microsoft YaHei',
-    bodyFontFace: 'Microsoft YaHei',
-    lang: 'zh-CN',
-  };
   return pptx;
 }
 
