@@ -15,8 +15,9 @@
 import React, {useEffect, useMemo, useState} from "react";
 import {useHistory} from "react-router-dom";
 import {Bubble} from "@ant-design/x";
-import {Alert, Avatar, Button, Collapse, Space} from "antd";
-import {FileTextOutlined, GlobalOutlined, InfoCircleOutlined} from "@ant-design/icons";
+import {Alert, Avatar, Button, Card, Collapse, Flex, Space, Tag, Typography} from "antd";
+import {DownloadOutlined, FileTextOutlined, GlobalOutlined, InfoCircleOutlined} from "@ant-design/icons";
+import {saveAs} from "file-saver";
 import moment from "moment";
 import * as Setting from "../Setting";
 import i18next from "i18next";
@@ -30,6 +31,26 @@ import KnowledgeSourcesDrawer from "./KnowledgeSourcesDrawer";
 import ToolCallSection from "./ToolCallSection";
 
 const {Panel} = Collapse;
+
+const generatedResourceListStyle = {width: "100%", maxWidth: 760, marginBottom: 12};
+const generatedResourceCardStyle = {width: "100%"};
+const generatedResourceRowStyle = {width: "100%"};
+const generatedResourceMetaStyle = {flex: 1, minWidth: 0};
+const generatedResourceTagStyle = {width: "fit-content", marginInlineEnd: 0};
+
+const downloadGeneratedResource = async(e, href, fileName) => {
+  e.preventDefault();
+  try {
+    const response = await fetch(href);
+    if (!response.ok) {
+      throw new Error(response.statusText);
+    }
+    const blob = await response.blob();
+    saveAs(blob, fileName);
+  } catch (error) {
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+};
 
 const MessageItem = ({
   message,
@@ -96,6 +117,30 @@ const MessageItem = ({
     }
     return merged;
   }, [message.searchResults, message.toolCalls]);
+
+  const generatedResources = useMemo(() => {
+    const resources = [];
+    (message.toolCalls || []).forEach(toolCall => {
+      if (!toolCall.content) {
+        return;
+      }
+      let content;
+      try {
+        content = JSON.parse(toolCall.content);
+      } catch (e) {
+        return;
+      }
+      if (!Array.isArray(content)) {
+        return;
+      }
+      content.forEach(item => {
+        if (item && item.type === "resource_link" && typeof item.uri === "string" && item.uri !== "") {
+          resources.push(item);
+        }
+      });
+    });
+    return resources;
+  }, [message.toolCalls]);
 
   const isDark = Setting.getIsDark();
 
@@ -272,6 +317,44 @@ const MessageItem = ({
           />
 
           <div className="message-answer">
+            {generatedResources.length > 0 && (
+              <Flex vertical gap="small" style={generatedResourceListStyle}>
+                {generatedResources.map((resource, idx) => {
+                  const href = resource.uri;
+                  const fileName = resource.name || resource.uri;
+                  const ext = fileName.includes(".") ? fileName.substring(fileName.lastIndexOf(".") + 1).toUpperCase() : (resource.mimeType || "FILE").split("/").pop().toUpperCase();
+                  return (
+                    <Card
+                      key={`${resource.uri}-${idx}`}
+                      size="small"
+                      style={generatedResourceCardStyle}
+                    >
+                      <Flex align="center" gap="middle" style={generatedResourceRowStyle}>
+                        <Avatar shape="square" size={48} icon={<FileTextOutlined />} />
+                        <Flex vertical gap={2} style={generatedResourceMetaStyle}>
+                          <Typography.Text strong ellipsis={{tooltip: fileName}}>
+                            {fileName}
+                          </Typography.Text>
+                          <Tag style={generatedResourceTagStyle}>
+                            {ext}
+                          </Tag>
+                        </Flex>
+                        <Button
+                          href={href}
+                          download={fileName}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => downloadGeneratedResource(e, href, fileName)}
+                          icon={<DownloadOutlined />}
+                        >
+                          {i18next.t("general:Download")}
+                        </Button>
+                      </Flex>
+                    </Card>
+                  );
+                })}
+              </Flex>
+            )}
             {message.html || renderText(message.text)}
           </div>
         </div>
