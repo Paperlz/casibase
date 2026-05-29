@@ -16,6 +16,8 @@ package object
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"mime"
 	"os"
@@ -24,7 +26,6 @@ import (
 
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
 	"github.com/the-open-agent/openagent/tool"
-	"github.com/the-open-agent/openagent/util"
 )
 
 type generatedResourceArchiveBuiltinTool struct {
@@ -35,6 +36,18 @@ type generatedResourceArchiveBuiltinTool struct {
 
 var archiveGeneratedResourceFile = func(owner, user, path string) (*Resource, error) {
 	return archiveGeneratedResourceFileToStorage(owner, user, path)
+}
+
+var resourceArchiveStorageNameExists = func(storageName string) (bool, error) {
+	return adapter.engine.Where("storage_name = ?", storageName).Exist(&Resource{})
+}
+
+var resourceArchiveRandomHexSuffix = func() (string, error) {
+	bytes := make([]byte, 3)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }
 
 func wrapGeneratedResourceBuiltin(builtin tool.BuiltinTool, owner, user string) tool.BuiltinTool {
@@ -131,12 +144,10 @@ func archiveGeneratedResourceFileToStorage(owner, user, path string) (*Resource,
 	}
 	ext := strings.ToLower(filepath.Ext(fileName))
 	fileType := getGeneratedResourceFileType(ext)
-	storageName := fmt.Sprintf(
-		"openagent/resources/generated/%s_%s_%s",
-		resourceArchiveSafePathSegment(util.GetCurrentTime()),
-		util.GetRandomName(),
-		resourceArchiveSafePathSegment(fileName),
-	)
+	storageName, err := generatedResourceStorageName(fileName)
+	if err != nil {
+		return nil, err
+	}
 
 	fileUrl, err := UploadFileToStorageSafe(storageName, fileBytes, "", "")
 	if err != nil {
@@ -148,6 +159,47 @@ func archiveGeneratedResourceFileToStorage(owner, user, path string) (*Resource,
 		return nil, err
 	}
 	return resource, nil
+}
+
+func generatedResourceStorageName(fileName string) (string, error) {
+	safeFileName := resourceArchiveSafePathSegment(fileName)
+	storageName := generatedResourceStorageKey(safeFileName)
+	exists, err := resourceArchiveStorageNameExists(storageName)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return storageName, nil
+	}
+
+	for i := 0; i < 100; i++ {
+		suffix, err := resourceArchiveRandomHexSuffix()
+		if err != nil {
+			return "", err
+		}
+		storageName = generatedResourceStorageKey(resourceArchiveFileNameWithSuffix(safeFileName, suffix))
+		exists, err = resourceArchiveStorageNameExists(storageName)
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return storageName, nil
+		}
+	}
+	return "", fmt.Errorf("failed to allocate unique generated resource storage name for %s", fileName)
+}
+
+func generatedResourceStorageKey(fileName string) string {
+	return fmt.Sprintf("openagent/resources/generated/%s", fileName)
+}
+
+func resourceArchiveFileNameWithSuffix(fileName, suffix string) string {
+	ext := filepath.Ext(fileName)
+	base := strings.TrimSuffix(fileName, ext)
+	if base == "" {
+		return fmt.Sprintf("%s_%s", fileName, suffix)
+	}
+	return fmt.Sprintf("%s_%s%s", base, suffix, ext)
 }
 
 func getGeneratedResourceFileType(ext string) string {
