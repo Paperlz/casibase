@@ -20,6 +20,8 @@ import Editor from "../common/Editor";
 
 /* ── Helpers ──────────────────────────────────────────────────── */
 
+const streamingPreviewLimit = 6000;
+
 function renderJsonContent(raw) {
   let text = raw;
   try {
@@ -38,6 +40,29 @@ function renderJsonContent(raw) {
       lineNumbers={false}
       lineWrapping
     />
+  );
+}
+
+function renderStreamingContent(raw, isDark) {
+  const text = raw.length > streamingPreviewLimit ? raw.slice(raw.length - streamingPreviewLimit) : raw;
+  return (
+    <pre style={{
+      margin: 0,
+      maxHeight: "260px",
+      overflow: "auto",
+      whiteSpace: "pre-wrap",
+      wordBreak: "break-word",
+      fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+      fontSize: "12px",
+      lineHeight: 1.45,
+      padding: "10px",
+      borderRadius: "6px",
+      background: isDark ? "#11141d" : "#1f2430",
+      color: "#d8deef",
+      border: isDark ? "1px solid #252a3a" : "1px solid #2f3545",
+    }}>
+      {text}
+    </pre>
   );
 }
 
@@ -164,7 +189,7 @@ export const ToolCallCard = ({toolCall, isDark, themeColor, isLast}) => {
               }}>
                 {i18next.t("chat:Arguments")}
               </div>
-              {renderJsonContent(toolCall.arguments)}
+              {toolCall.content ? renderJsonContent(toolCall.arguments) : renderStreamingContent(toolCall.arguments, isDark)}
             </div>
           )}
           {toolCall.content ? (

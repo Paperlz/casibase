@@ -428,6 +428,25 @@ class ChatWidget extends React.Component {
     const toolCalls = [];
     let searchResults = null;
     let vectorScores = null;
+    const toolDeltaPreviewLimit = 6000;
+    const flushToolDelta = () => {
+      if (!chat || (this.state.currentChat?.name !== chat.name)) {
+        return;
+      }
+
+      const updatedMessages = [...this.state.messages];
+      if (updatedMessages.length === 0) {
+        return;
+      }
+      const currentMessage = updatedMessages[updatedMessages.length - 1] || lastMessage;
+      const lastMessage2 = Setting.deepCopy(currentMessage);
+      lastMessage2.toolCalls = [...toolCalls];
+      updatedMessages[updatedMessages.length - 1] = lastMessage2;
+
+      this.setState({
+        messages: updatedMessages,
+      });
+    };
     this.setState({
       messageLoading: true,
     });
@@ -505,6 +524,9 @@ class ChatWidget extends React.Component {
         lastMessage2.reasonText = reasonText;
         lastMessage2.isReasoningPhase = true;
         lastMessage2.text = "";
+        if (toolCalls.length > 0) {
+          lastMessage2.toolCalls = [...toolCalls];
+        }
 
         const updatedMessages = [...messages];
         updatedMessages[updatedMessages.length - 1] = lastMessage2;
@@ -521,12 +543,25 @@ class ChatWidget extends React.Component {
         const jsonData = JSON.parse(data);
 
         if (!jsonData.content) {
-          // tool-start: add new entry with empty content (tool is executing)
-          toolCalls.push({
-            name: jsonData.name,
-            arguments: jsonData.arguments,
-            content: "",
-          });
+          let found = false;
+          for (let i = toolCalls.length - 1; i >= 0; i--) {
+            if (toolCalls[i].generatingArguments && !toolCalls[i].content && (!jsonData.name || toolCalls[i].name === jsonData.name || toolCalls[i].name === "tool")) {
+              toolCalls[i] = {
+                name: jsonData.name,
+                arguments: jsonData.arguments,
+                content: "",
+              };
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            toolCalls.push({
+              name: jsonData.name,
+              arguments: jsonData.arguments,
+              content: "",
+            });
+          }
         } else {
           // tool-complete: find the last pending entry with same name and update it
           let found = false;
@@ -550,10 +585,13 @@ class ChatWidget extends React.Component {
           }
         }
 
-        const lastMessage2 = Setting.deepCopy(lastMessage);
+        const updatedMessages = [...this.state.messages];
+        if (updatedMessages.length === 0) {
+          return;
+        }
+        const currentMessage = updatedMessages[updatedMessages.length - 1] || lastMessage;
+        const lastMessage2 = Setting.deepCopy(currentMessage);
         lastMessage2.toolCalls = [...toolCalls];
-
-        const updatedMessages = [...messages];
         updatedMessages[updatedMessages.length - 1] = lastMessage2;
 
         this.setState({
@@ -624,6 +662,7 @@ class ChatWidget extends React.Component {
         if (!chat || (this.state.currentChat?.name !== chat.name)) {
           return;
         }
+        flushToolDelta();
 
         const lastMessage2 = Setting.deepCopy(lastMessage);
         lastMessage2.text = text;
@@ -684,6 +723,37 @@ class ChatWidget extends React.Component {
           return;
         }
         this.updateChatDisplayName(update.displayName, {...chat, needTitle: update.needTitle ?? false});
+      },
+      (data) => {
+        if (!chat || (this.state.currentChat?.name !== chat.name)) {
+          return;
+        }
+        const jsonData = JSON.parse(data);
+        const index = jsonData.index ?? 0;
+        let found = false;
+
+        for (let i = toolCalls.length - 1; i >= 0; i--) {
+          if (toolCalls[i].generatingArguments && toolCalls[i].index === index) {
+            const nextArguments = `${toolCalls[i].arguments || ""}${jsonData.argumentsDelta || ""}`;
+            toolCalls[i] = {
+              ...toolCalls[i],
+              name: jsonData.name || toolCalls[i].name,
+              arguments: nextArguments.length > toolDeltaPreviewLimit ? nextArguments.slice(nextArguments.length - toolDeltaPreviewLimit) : nextArguments,
+            };
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          toolCalls.push({
+            index,
+            name: jsonData.name || "tool",
+            arguments: (jsonData.argumentsDelta || "").length > toolDeltaPreviewLimit ? (jsonData.argumentsDelta || "").slice((jsonData.argumentsDelta || "").length - toolDeltaPreviewLimit) : (jsonData.argumentsDelta || ""),
+            content: "",
+            generatingArguments: true,
+          });
+        }
+        flushToolDelta();
       }
     );
   }
