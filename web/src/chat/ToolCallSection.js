@@ -17,10 +17,9 @@ import {Spin} from "antd";
 import {CheckCircleFilled, CodeOutlined, DownOutlined, LoadingOutlined} from "@ant-design/icons";
 import i18next from "i18next";
 import Editor from "../common/Editor";
+import {TOOL_DELTA_PREVIEW_LIMIT} from "./toolCallStream";
 
 /* ── Helpers ──────────────────────────────────────────────────── */
-
-const streamingPreviewLimit = 6000;
 
 function renderJsonContent(raw) {
   let text = raw;
@@ -44,7 +43,7 @@ function renderJsonContent(raw) {
 }
 
 function renderStreamingContent(raw, isDark) {
-  const text = raw.length > streamingPreviewLimit ? raw.slice(raw.length - streamingPreviewLimit) : raw;
+  const text = raw.length > TOOL_DELTA_PREVIEW_LIMIT ? raw.slice(raw.length - TOOL_DELTA_PREVIEW_LIMIT) : raw;
   return (
     <pre style={{
       margin: 0,

@@ -29,6 +29,7 @@ import i18next from "i18next";
 import BaseListPage from "./BaseListPage";
 import {MessageCarrier} from "./chat/MessageCarrier";
 import {getFirstUserMessageText} from "./carrier/titleUtils";
+import {TOOL_DELTA_FLUSH_INTERVAL, applyToolDelta, applyToolEvent} from "./chat/toolCallStream";
 
 const chatStatusPollingInterval = 2000;
 
@@ -484,7 +485,7 @@ class ChatPage extends BaseListPage {
             let text = "";
             let reasonText = "";
             const toolCalls = [];
-            const toolDeltaPreviewLimit = 6000;
+            let toolDeltaFlushTimer = null;
             const flushToolDelta = () => {
               if (!chat || (this.state.chat?.name !== chat.name)) {
                 return;
@@ -495,6 +496,22 @@ class ChatPage extends BaseListPage {
               lastMessage2.toolCalls = [...toolCalls];
               res.data[res.data.length - 1] = lastMessage2;
               this.setState({messages: [...res.data]});
+            };
+            const scheduleToolDeltaFlush = () => {
+              if (toolDeltaFlushTimer !== null) {
+                return;
+              }
+              toolDeltaFlushTimer = window.setTimeout(() => {
+                toolDeltaFlushTimer = null;
+                flushToolDelta();
+              }, TOOL_DELTA_FLUSH_INTERVAL);
+            };
+            const flushToolDeltaNow = () => {
+              if (toolDeltaFlushTimer !== null) {
+                window.clearTimeout(toolDeltaFlushTimer);
+                toolDeltaFlushTimer = null;
+              }
+              flushToolDelta();
             };
             this.setState({
               messageLoading: true,
@@ -573,57 +590,8 @@ class ChatPage extends BaseListPage {
               }
               const jsonData = JSON.parse(data);
 
-              if (!jsonData.content) {
-                let found = false;
-                for (let i = toolCalls.length - 1; i >= 0; i--) {
-                  if (toolCalls[i].generatingArguments && !toolCalls[i].content && (!jsonData.name || toolCalls[i].name === jsonData.name || toolCalls[i].name === "tool")) {
-                    toolCalls[i] = {
-                      name: jsonData.name,
-                      arguments: jsonData.arguments,
-                      content: "",
-                    };
-                    found = true;
-                    break;
-                  }
-                }
-                if (!found) {
-                  toolCalls.push({
-                    name: jsonData.name,
-                    arguments: jsonData.arguments,
-                    content: "",
-                  });
-                }
-              } else {
-                // tool-complete: find the last pending entry with same name and update it
-                let found = false;
-                for (let i = toolCalls.length - 1; i >= 0; i--) {
-                  if (toolCalls[i].name === jsonData.name && !toolCalls[i].content) {
-                    toolCalls[i] = {
-                      name: jsonData.name,
-                      arguments: jsonData.arguments,
-                      content: jsonData.content,
-                    };
-                    found = true;
-                    break;
-                  }
-                }
-                if (!found) {
-                  toolCalls.push({
-                    name: jsonData.name,
-                    arguments: jsonData.arguments,
-                    content: jsonData.content,
-                  });
-                }
-              }
-
-              const currentMessage = res.data[res.data.length - 1];
-              const lastMessage2 = Setting.deepCopy(currentMessage);
-              lastMessage2.toolCalls = [...toolCalls];
-              res.data[res.data.length - 1] = lastMessage2;
-
-              this.setState({
-                messages: [...res.data],
-              });
+              applyToolEvent(toolCalls, jsonData);
+              flushToolDeltaNow();
             }, (data) => {
               // onSearch callback
               if (!chat || (this.state.chat?.name !== chat.name)) {
@@ -687,7 +655,7 @@ class ChatPage extends BaseListPage {
               if (!chat || (this.state.chat?.name !== chat.name)) {
                 return;
               }
-              flushToolDelta();
+              flushToolDeltaNow();
               const lastMessage2 = Setting.deepCopy(lastMessage);
               lastMessage2.text = text;
 
@@ -777,36 +745,8 @@ class ChatPage extends BaseListPage {
                 return;
               }
               const jsonData = JSON.parse(data);
-              const index = jsonData.index ?? 0;
-              let found = false;
-
-              for (let i = toolCalls.length - 1; i >= 0; i--) {
-                if (toolCalls[i].generatingArguments && toolCalls[i].index === index) {
-                  const nextArguments = `${toolCalls[i].arguments || ""}${jsonData.argumentsDelta || ""}`;
-                  toolCalls[i] = {
-                    ...toolCalls[i],
-                    name: jsonData.name || toolCalls[i].name,
-                    arguments: nextArguments.length > toolDeltaPreviewLimit ? nextArguments.slice(nextArguments.length - toolDeltaPreviewLimit) : nextArguments,
-                  };
-                  found = true;
-                  break;
-                }
-              }
-              if (!found) {
-                toolCalls.push({
-                  index,
-                  name: jsonData.name || "tool",
-                  arguments: (jsonData.argumentsDelta || "").length > toolDeltaPreviewLimit ? (jsonData.argumentsDelta || "").slice((jsonData.argumentsDelta || "").length - toolDeltaPreviewLimit) : (jsonData.argumentsDelta || ""),
-                  content: "",
-                  generatingArguments: true,
-                });
-              }
-
-              const currentMessage = res.data[res.data.length - 1];
-              const lastMessage2 = Setting.deepCopy(currentMessage);
-              lastMessage2.toolCalls = [...toolCalls];
-              res.data[res.data.length - 1] = lastMessage2;
-              flushToolDelta();
+              applyToolDelta(toolCalls, jsonData);
+              scheduleToolDeltaFlush();
             });
           } else {
             this.setState({
