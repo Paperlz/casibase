@@ -15,57 +15,8 @@
 package model
 
 import (
-	"encoding/base64"
-	"fmt"
-	"io"
-	"net/http"
-	"path/filepath"
-	"regexp"
-	"strings"
-
 	"github.com/sashabaranov/go-openai"
 )
-
-func extractImagesURL(message string) ([]string, string) {
-	message = strings.Replace(message, "&nbsp;", " ", -1)
-	br := regexp.MustCompile(`<br\s*/?>`)
-	message = br.ReplaceAllString(message, " ")
-
-	imgURL := regexp.MustCompile(`http[s]?://\S+\.(jpg|jpeg|png|gif|webp)`)
-	urls := imgURL.FindAllString(message, -1)
-	quote := regexp.MustCompile(`\"$`)
-	for i, url := range urls {
-		urls[i] = quote.ReplaceAllString(url, "")
-	}
-
-	message = imgURL.ReplaceAllString(message, "")
-
-	img := regexp.MustCompile(`<img[^>]+>`)
-	message = img.ReplaceAllString(message, "")
-	return urls, message
-}
-
-func getImageRefinedText(text string) (string, error) {
-	ext := filepath.Ext(text)
-	if ext != "" {
-		ext = ext[1:]
-	}
-
-	resp, err := http.Get(text)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	base64Data := base64.StdEncoding.EncodeToString(data)
-	res := fmt.Sprintf("data:image/%s;base64,%s", ext, base64Data)
-	return res, nil
-}
 
 func IsVisionModel(subType string) bool {
 	visionModels := []string{
@@ -113,7 +64,10 @@ func OpenaiRawMessagesToGptVisionMessages(messages []*RawMessage) ([]openai.Chat
 			role = openai.ChatMessageRoleUser
 		}
 
-		urls, messageText := extractImagesURL(message.Text)
+		imageDataURLs, messageText, err := extractImageDataURLsFromMessage(message.Text)
+		if err != nil {
+			return []openai.ChatCompletionMessage{}, err
+		}
 
 		item := openai.ChatCompletionMessage{
 			Role:             role,
@@ -139,16 +93,11 @@ func OpenaiRawMessagesToGptVisionMessages(messages []*RawMessage) ([]openai.Chat
 			}
 		}
 
-		for _, url := range urls {
-			imageText, err := getImageRefinedText(url)
-			if err != nil {
-				return []openai.ChatCompletionMessage{}, err
-			}
-
+		for _, imageDataURL := range imageDataURLs {
 			item.MultiContent = append(item.MultiContent, openai.ChatMessagePart{
 				Type: openai.ChatMessagePartTypeImageURL,
 				ImageURL: &openai.ChatMessageImageURL{
-					URL:    imageText,
+					URL:    imageDataURL,
 					Detail: openai.ImageURLDetailAuto,
 				},
 			})
