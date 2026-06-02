@@ -760,7 +760,7 @@ func openaiRawMessagesToGptVisionMessages(messages []*RawMessage) (responses.Res
 			role = responses.EasyInputMessageRoleUser
 		}
 
-		imageDataURLs, messageText, err := extractImageDataURLsFromMessage(message.Text)
+		imageRefs, messageText, err := extractImageRefsFromMessage(message.Text)
 		if err != nil {
 			return res, err
 		}
@@ -776,10 +776,10 @@ func openaiRawMessagesToGptVisionMessages(messages []*RawMessage) (responses.Res
 				},
 			})
 		}
-		for _, imageDataURL := range imageDataURLs {
+		for _, imageRef := range imageRefs {
 			itemContentList = append(itemContentList, responses.ResponseInputContentUnionParam{
 				OfInputImage: &responses.ResponseInputImageParam{
-					ImageURL: param.NewOpt[string](imageDataURL),
+					ImageURL: param.NewOpt[string](imageRef),
 				},
 			})
 		}

@@ -64,7 +64,7 @@ func OpenaiRawMessagesToGptVisionMessages(messages []*RawMessage) ([]openai.Chat
 			role = openai.ChatMessageRoleUser
 		}
 
-		imageDataURLs, messageText, err := extractImageDataURLsFromMessage(message.Text)
+		imageRefs, messageText, err := extractImageRefsFromMessage(message.Text)
 		if err != nil {
 			return []openai.ChatCompletionMessage{}, err
 		}
@@ -93,11 +93,11 @@ func OpenaiRawMessagesToGptVisionMessages(messages []*RawMessage) ([]openai.Chat
 			}
 		}
 
-		for _, imageDataURL := range imageDataURLs {
+		for _, imageRef := range imageRefs {
 			item.MultiContent = append(item.MultiContent, openai.ChatMessagePart{
 				Type: openai.ChatMessagePartTypeImageURL,
 				ImageURL: &openai.ChatMessageImageURL{
-					URL:    imageDataURL,
+					URL:    imageRef,
 					Detail: openai.ImageURLDetailAuto,
 				},
 			})

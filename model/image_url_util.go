@@ -18,7 +18,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"html"
-	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -26,8 +25,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/the-open-agent/openagent/proxy"
 )
 
 var (
@@ -37,15 +34,15 @@ var (
 	bareHTTPImageRegexp = regexp.MustCompile(`(?i)https?://[^\s"'<>]+\.(?:jpg|jpeg|png|gif|webp)(?:\?[^\s"'<>]*)?`)
 )
 
-func extractImageDataURLsFromMessage(message string) ([]string, string, error) {
+func extractImageRefsFromMessage(message string) ([]string, string, error) {
 	imageSources, messageText := extractImageSourcesFromMessage(message)
 	res := make([]string, 0, len(imageSources))
 	for _, imageSource := range imageSources {
-		imageDataURL, err := imageSourceToDataURL(imageSource)
+		imageRef, err := imageSourceToRef(imageSource)
 		if err != nil {
 			return nil, "", err
 		}
-		res = append(res, imageDataURL)
+		res = append(res, imageRef)
 	}
 
 	return res, messageText, nil
@@ -86,7 +83,7 @@ func cleanImageSource(src string) string {
 	return html.UnescapeString(strings.TrimSpace(src))
 }
 
-func imageSourceToDataURL(src string) (string, error) {
+func imageSourceToRef(src string) (string, error) {
 	src = cleanImageSource(src)
 	lowerSrc := strings.ToLower(src)
 	if strings.HasPrefix(lowerSrc, "data:image/") {
@@ -104,7 +101,7 @@ func imageSourceToDataURL(src string) (string, error) {
 	}
 
 	if strings.HasPrefix(lowerSrc, "http://") || strings.HasPrefix(lowerSrc, "https://") {
-		return httpImageToDataURL(src)
+		return src, nil
 	}
 
 	return "", fmt.Errorf("unsupported image source: %s", src)
@@ -172,34 +169,6 @@ func localImageFileToDataURL(path string) (string, error) {
 		return "", err
 	}
 	return imageBytesToDataURL(data, "", path)
-}
-
-func httpImageToDataURL(src string) (string, error) {
-	client := proxy.GetHttpClient(src)
-	if client == nil {
-		client = http.DefaultClient
-	}
-
-	resp, err := client.Get(src)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("download image failed with status code %d: %s", resp.StatusCode, src)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	sourcePath := src
-	if u, err := url.Parse(src); err == nil {
-		sourcePath = u.Path
-	}
-	return imageBytesToDataURL(data, resp.Header.Get("Content-Type"), sourcePath)
 }
 
 func imageBytesToDataURL(data []byte, contentType string, sourcePath string) (string, error) {
