@@ -68,6 +68,10 @@ func getImageRefinedText(text string) (string, error) {
 }
 
 func IsVisionModel(subType string) bool {
+	if isAlibabacloudMultimodalQwenModel(subType) {
+		return true
+	}
+
 	visionModels := []string{
 		// GPT-5.4 series (latest)
 		"gpt-5.4", "gpt-5.4-pro", "gpt-5.4-mini", "gpt-5.4-nano",

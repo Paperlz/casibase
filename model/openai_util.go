@@ -59,6 +59,10 @@ func GetOpenAiMaxTokens(model string) int {
 }
 
 func getOpenAiModelType(model string) string {
+	if isAlibabacloudMultimodalQwenModel(model) {
+		return "Chat"
+	}
+
 	chatModels := []string{
 		// GPT-5.5 series (latest)
 		"gpt-5.5", "gpt-5.5-pro", "gpt-5.5-instant", "gpt-5.5-cyber",

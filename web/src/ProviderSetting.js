@@ -1003,6 +1003,10 @@ export function getModelSubTypeOptions(type) {
     ];
   } else if (type === "Alibaba Cloud") {
     return [
+      {id: "qwen3.6-plus", name: "qwen3.6-plus"},
+      {id: "qwen3.6-flash", name: "qwen3.6-flash"},
+      {id: "qwen3-vl-plus", name: "qwen3-vl-plus"},
+      {id: "qwen3-vl-flash", name: "qwen3-vl-flash"},
       {id: "qwen3-235b-a22b", name: "qwen3-235b-a22b"},
       {id: "qwen3-32b", name: "qwen3-32b"},
       {id: "qwen-max", name: "qwen-max"},
