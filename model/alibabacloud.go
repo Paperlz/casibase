@@ -50,7 +50,7 @@ func isWanxModel(subType string) bool {
 	return strings.HasPrefix(subType, "wanx")
 }
 
-func isAlibabacloudMultimodalQwenModel(subType string) bool {
+func isQwenMultimodalModel(subType string) bool {
 	return strings.HasPrefix(subType, "qwen3.6-") ||
 		strings.HasPrefix(subType, "qwen3-vl-") ||
 		strings.HasPrefix(subType, "qwen-vl-") ||
@@ -124,6 +124,8 @@ func (p *AlibabacloudModelProvider) calculatePrice(modelResult *ModelResult, lan
 		return nil
 	}
 
+	// Prices are CNY per 1K tokens, converted from Alibaba Model Studio
+	// per-1M-token pricing: https://help.aliyun.com/zh/model-studio/model-pricing (checked 2026-06-03).
 	priceTable := map[string][2]float64{
 		"qwen-long":                     {0.0005, 0.002},
 		"qwen-turbo":                    {0.002, 0.006},
@@ -160,6 +162,8 @@ func (p *AlibabacloudModelProvider) calculatePrice(modelResult *ModelResult, lan
 	return nil
 }
 
+// Tiered prices are CNY per 1K tokens, converted from Alibaba Model Studio
+// per-1M-token pricing: https://help.aliyun.com/zh/model-studio/model-pricing (checked 2026-06-03).
 func getAlibabacloudTieredPrice(subType string, promptTokenCount int) ([2]float64, bool) {
 	switch {
 	case strings.HasPrefix(subType, "qwen3.6-plus"):
@@ -257,7 +261,7 @@ func (p *AlibabacloudModelProvider) QueryText(question string, writer io.Writer,
 		return p.queryWanx(ctx, question, writer, lang)
 	}
 
-	if isAlibabacloudMultimodalQwenModel(p.subType) {
+	if isQwenMultimodalModel(p.subType) {
 		const baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 		localProvider, err := NewLocalModelProvider("Custom-think", "custom-model", p.apiKey, p.temperature, p.topP, 0, 0, baseUrl, p.subType, 0, 0, "CNY")
 		if err != nil {
