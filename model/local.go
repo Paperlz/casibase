@@ -225,6 +225,8 @@ func (p *LocalModelProvider) QueryText(question string, writer io.Writer, histor
 		client = getAzureClientFromToken(p.deploymentName, p.secretKey, p.providerUrl, p.apiVersion)
 	} else if p.typ == "GitHub" {
 		client = getGitHubClientFromToken(p.secretKey, p.providerUrl)
+	} else if p.typ == "Ollama" {
+		client = getLocalClientFromUrl(p.secretKey, p.providerUrl+"/v1")
 	} else if p.typ == "Custom" || p.typ == "Custom-think" {
 		client = getLocalClientFromUrl(p.secretKey, p.providerUrl)
 	}
@@ -259,7 +261,7 @@ func (p *LocalModelProvider) QueryText(question string, writer io.Writer, histor
 	maxTokens := getContextLength(model)
 
 	modelResult := &ModelResult{}
-	if getOpenAiModelType(model) == "Chat" {
+	if p.typ == "Ollama" || getOpenAiModelType(model) == "Chat" {
 		rawMessages, err := OpenaiGenerateMessages(prompt, question, history, knowledgeMessages, model, maxTokens, lang)
 		if err != nil {
 			return nil, err
