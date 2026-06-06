@@ -31,7 +31,7 @@ ENV BUILDX_ARCH="${TARGETOS:-linux}_${TARGETARCH:-amd64}"
 RUN sed -i 's/https/http/' /etc/apk/repositories
 RUN apk add --update sudo
 RUN apk add curl
-RUN apk add nodejs
+RUN apk add nodejs python3
 RUN apk add ca-certificates && update-ca-certificates
 
 RUN adduser -D $USER -u 1000 \
@@ -50,6 +50,7 @@ COPY --from=back --chown=$USER:$USER /go/src/openagent/conf/app.conf ./conf/app.
 COPY --from=back --chown=$USER:$USER /go/src/openagent/skills ./skills
 COPY --from=front --chown=$USER:$USER /web/build ./web/build
 COPY --from=pptx_worker --chown=$USER:$USER /pptx-worker/worker.bundle.mjs ./pptx-worker/worker.bundle.mjs
+COPY --from=back --chown=$USER:$USER /go/src/openagent/tool/pptx-template-worker ./pptx-template-worker
 ENV RUNNING_IN_DOCKER=true
 
 ENTRYPOINT ["/server"]
@@ -69,7 +70,7 @@ ARG TARGETOS
 ARG TARGETARCH
 ENV BUILDX_ARCH="${TARGETOS:-linux}_${TARGETARCH:-amd64}"
 
-RUN apt update && apt install -y ca-certificates nodejs && update-ca-certificates
+RUN apt update && apt install -y ca-certificates nodejs python3 && update-ca-certificates
 
 WORKDIR /
 COPY --from=back /go/src/openagent/server_${BUILDX_ARCH} ./server
@@ -79,6 +80,7 @@ COPY --from=back /go/src/openagent/conf/app.conf ./conf/app.conf
 COPY --from=back /go/src/openagent/skills ./skills
 COPY --from=front /web/build ./web/build
 COPY --from=pptx_worker /pptx-worker/worker.bundle.mjs ./pptx-worker/worker.bundle.mjs
+COPY --from=back /go/src/openagent/tool/pptx-template-worker ./pptx-template-worker
 ENV RUNNING_IN_DOCKER=true
 
 ENTRYPOINT ["/bin/bash"]

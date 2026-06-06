@@ -16,7 +16,7 @@
 
 // This file is only compiled when building with -tags embed.
 // It embeds conf/, web/build/ (without source-map files), skills/, the OCR
-// service, and the PPTX worker into the binary, and wires them up via
+// service, and the PPTX workers into the binary, and wires them up via
 // embedsupport.Setup so that the server can run from a single executable
 // without any on-disk assets.
 // On-disk files always take priority over the embedded versions at runtime.
@@ -51,11 +51,15 @@ var _embeddedOcrService embed.FS
 //go:embed tool/pptx-worker/worker.bundle.mjs
 var _embeddedPptxWorker embed.FS
 
+//go:embed tool/pptx-template-worker
+var _embeddedPptxTemplateWorker embed.FS
+
 func init() {
 	confFS, _ := fs.Sub(_embeddedConf, "conf")
 	webFS, _ := fs.Sub(_embeddedWeb, "web/build")
 	skillsFS, _ := fs.Sub(_embeddedSkills, "skills")
 	ocrServiceFS, _ := fs.Sub(_embeddedOcrService, "deploy/ocr-service")
 	pptxWorkerFS, _ := fs.Sub(_embeddedPptxWorker, "tool/pptx-worker")
-	embedsupport.Setup(confFS, webFS, skillsFS, ocrServiceFS, pptxWorkerFS)
+	pptxTemplateWorkerFS, _ := fs.Sub(_embeddedPptxTemplateWorker, "tool/pptx-template-worker")
+	embedsupport.Setup(confFS, webFS, skillsFS, ocrServiceFS, pptxWorkerFS, pptxTemplateWorkerFS)
 }

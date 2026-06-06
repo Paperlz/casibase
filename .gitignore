@@ -13,6 +13,10 @@ openagent
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# Python bytecode and cache directories
+__pycache__/
+*.py[cod]
+
 # Dependency directories (CI runs `go mod vendor` only on the runner; never commit vendor/)
 vendor/
 node_modules/
