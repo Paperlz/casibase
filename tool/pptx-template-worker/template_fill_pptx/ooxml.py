@@ -8,6 +8,7 @@ JSON readers / writers. Write-side package plumbing lives in ``package.py``.
 from __future__ import annotations
 
 import json
+import math
 import posixpath
 import zipfile
 from dataclasses import dataclass
@@ -31,6 +32,8 @@ C16_NS = "http://schemas.microsoft.com/office/drawing/2014/chart"
 C16R2_NS = "http://schemas.microsoft.com/office/drawing/2015/06/chart"
 
 SLIDE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
+SLIDE_LAYOUT_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout"
+SLIDE_MASTER_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster"
 NOTES_SLIDE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide"
 CHART_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart"
 PACKAGE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package"
@@ -155,6 +158,69 @@ def _slide_relationships(zf: zipfile.ZipFile, rels_name: str) -> dict[str, dict[
     return relationships
 
 
+def _related_part(
+    zf: zipfile.ZipFile,
+    owner_part: str,
+    relationship_type: str,
+) -> str | None:
+    relationships = _slide_relationships(zf, _rels_name_for_part(owner_part))
+    for relationship in relationships.values():
+        if relationship.get("type") == relationship_type:
+            return _normalize_part(relationship["target"], owner_part)
+    return None
+
+
+def _placeholder_key(container: ET.Element) -> tuple[str, str] | None:
+    placeholder = container.find("p:nvSpPr/p:nvPr/p:ph", NS)
+    if placeholder is None:
+        return None
+    placeholder_type = placeholder.attrib.get("type", "body")
+    placeholder_index = placeholder.attrib.get("idx", "")
+    return placeholder_type, placeholder_index
+
+
+def _placeholder_map(root: ET.Element | None) -> dict[tuple[str, str], ET.Element]:
+    if root is None:
+        return {}
+    result: dict[tuple[str, str], ET.Element] = {}
+    for container in root.findall(".//p:sp", NS):
+        key = _placeholder_key(container)
+        if key is not None:
+            result[key] = container
+    return result
+
+
+def _slide_inheritance_roots(
+    zf: zipfile.ZipFile,
+    slide_part: str,
+) -> tuple[ET.Element | None, ET.Element | None]:
+    layout_part = _related_part(zf, slide_part, SLIDE_LAYOUT_REL_TYPE)
+    if not layout_part:
+        return None, None
+    layout_root = _read_xml(zf, layout_part)
+    master_part = _related_part(zf, layout_part, SLIDE_MASTER_REL_TYPE)
+    master_root = _read_xml(zf, master_part) if master_part else None
+    return layout_root, master_root
+
+
+def _inherited_container_chain(
+    container: ET.Element,
+    layout_root: ET.Element | None,
+    master_root: ET.Element | None,
+) -> list[ET.Element]:
+    chain = [container]
+    key = _placeholder_key(container)
+    if key is None:
+        return chain
+    layout_container = _placeholder_map(layout_root).get(key)
+    if layout_container is not None:
+        chain.append(layout_container)
+    master_container = _placeholder_map(master_root).get(key)
+    if master_container is not None:
+        chain.append(master_container)
+    return chain
+
+
 def _paragraph_texts(container: ET.Element) -> list[str]:
     paragraphs: list[str] = []
     for paragraph in container.findall(".//a:p", NS):
@@ -183,6 +249,123 @@ def _container_geometry(container: ET.Element) -> dict[str, int | None]:
         "width": _emu_to_px(ext.attrib.get("cx")) if ext is not None else None,
         "height": _emu_to_px(ext.attrib.get("cy")) if ext is not None else None,
     }
+
+
+def _xfrm_values(element: ET.Element, *, group: bool = False) -> dict[str, float] | None:
+    if group:
+        properties = element.find("p:grpSpPr", NS)
+        xfrm = properties.find("a:xfrm", NS) if properties is not None else None
+    elif element.tag == _qn(NS["p"], "graphicFrame"):
+        xfrm = element.find("p:xfrm", NS)
+    else:
+        properties = element.find("p:spPr", NS)
+        xfrm = properties.find("a:xfrm", NS) if properties is not None else None
+    if xfrm is None:
+        return None
+    off = xfrm.find("a:off", NS)
+    ext = xfrm.find("a:ext", NS)
+    if off is None or ext is None:
+        return None
+    try:
+        values = {
+            "x": float(off.attrib.get("x", "0")),
+            "y": float(off.attrib.get("y", "0")),
+            "width": float(ext.attrib.get("cx", "0")),
+            "height": float(ext.attrib.get("cy", "0")),
+            "rotation": float(xfrm.attrib.get("rot", "0")) / 60000,
+        }
+        child_off = xfrm.find("a:chOff", NS)
+        child_ext = xfrm.find("a:chExt", NS)
+        if child_off is not None and child_ext is not None:
+            values.update(
+                {
+                    "child_x": float(child_off.attrib.get("x", "0")),
+                    "child_y": float(child_off.attrib.get("y", "0")),
+                    "child_width": float(child_ext.attrib.get("cx", "0")),
+                    "child_height": float(child_ext.attrib.get("cy", "0")),
+                }
+            )
+        return values
+    except ValueError:
+        return None
+
+
+def _absolute_geometry(
+    values: dict[str, float],
+    parent: dict[str, float] | None,
+) -> dict[str, int | float]:
+    if parent and parent.get("child_width") and parent.get("child_height"):
+        scale_x = parent["width"] / parent["child_width"]
+        scale_y = parent["height"] / parent["child_height"]
+        x = parent["x"] + (values["x"] - parent.get("child_x", 0.0)) * scale_x
+        y = parent["y"] + (values["y"] - parent.get("child_y", 0.0)) * scale_y
+        width = values["width"] * scale_x
+        height = values["height"] * scale_y
+    else:
+        x, y, width, height = values["x"], values["y"], values["width"], values["height"]
+    rotation = (values.get("rotation", 0.0) + (parent or {}).get("rotation", 0.0)) % 360
+    if rotation:
+        radians = math.radians(rotation)
+        bounding_width = abs(width * math.cos(radians)) + abs(height * math.sin(radians))
+        bounding_height = abs(width * math.sin(radians)) + abs(height * math.cos(radians))
+        x += (width - bounding_width) / 2
+        y += (height - bounding_height) / 2
+        width, height = bounding_width, bounding_height
+    return {
+        "x": round(x / EMU_PER_INCH * PX_PER_INCH),
+        "y": round(y / EMU_PER_INCH * PX_PER_INCH),
+        "width": round(width / EMU_PER_INCH * PX_PER_INCH),
+        "height": round(height / EMU_PER_INCH * PX_PER_INCH),
+        "rotation": round(rotation, 2),
+    }
+
+
+def _slide_objects(slide_root: ET.Element) -> list[dict[str, Any]]:
+    """Return drawable leaf objects in document order with absolute geometry."""
+    tree = slide_root.find("p:cSld/p:spTree", NS)
+    if tree is None:
+        return []
+    objects: list[dict[str, Any]] = []
+
+    def walk(parent_element: ET.Element, parent_xfrm: dict[str, float] | None = None) -> None:
+        for child in list(parent_element):
+            local_name = child.tag.rsplit("}", 1)[-1]
+            if local_name == "grpSp":
+                group_xfrm = _xfrm_values(child, group=True)
+                if group_xfrm is not None and parent_xfrm is not None:
+                    absolute = _absolute_geometry(group_xfrm, parent_xfrm)
+                    group_xfrm = {
+                        **group_xfrm,
+                        "x": absolute["x"] / PX_PER_INCH * EMU_PER_INCH,
+                        "y": absolute["y"] / PX_PER_INCH * EMU_PER_INCH,
+                        "width": absolute["width"] / PX_PER_INCH * EMU_PER_INCH,
+                        "height": absolute["height"] / PX_PER_INCH * EMU_PER_INCH,
+                    }
+                walk(child, group_xfrm)
+                continue
+            if local_name not in {"sp", "pic", "cxnSp", "graphicFrame"}:
+                continue
+            values = _xfrm_values(child)
+            shape_id, shape_name = _shape_identity(child, len(objects) + 1)
+            geometry = (
+                _absolute_geometry(values, parent_xfrm)
+                if values is not None
+                else {"x": None, "y": None, "width": None, "height": None, "rotation": 0}
+            )
+            has_text = any((node.text or "").strip() for node in child.findall(".//a:t", NS))
+            objects.append(
+                {
+                    "shape_id": shape_id,
+                    "shape_name": shape_name,
+                    "kind": local_name,
+                    "geometry": geometry,
+                    "z_order": len(objects),
+                    "has_text": has_text,
+                }
+            )
+
+    walk(tree)
+    return objects
 
 
 def _text_containers(slide_root: ET.Element) -> list[ET.Element]:

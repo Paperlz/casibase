@@ -73,6 +73,7 @@ def _fill(spec: dict[str, Any]) -> dict[str, Any]:
             temporary,
             transition=spec.get("transition", "keep"),
             transition_duration=float(spec.get("transition_duration", 0.5)),
+            library=library,
         )
         os.replace(temporary, output)
     finally:

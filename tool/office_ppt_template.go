@@ -142,8 +142,10 @@ func (t *pptxTemplateFillBuiltin) GetDescription() string {
 - template: local .pptx path or HTTP(S) chat attachment URL.
 - path: exact output .pptx path; relative paths resolve to the user's Documents folder.
 - plan: template_fill_pptx_plan.v1 object. Slides may be selected, repeated, and reordered. Each slide supports replacements, table_edits, chart_edits, and notes.
+- Do not insert manual line breaks into titles unless they are intentional; single-line template titles are auto-fitted by default.
+- Keep replacement text concise and respect capacity warnings. New text/image or text/text collisions are validation errors: shorten the content or choose another template slide.
 - transition defaults to "keep", preserving source transitions and object animations.
-The plan is checked before writing. Missing targets and invalid chart data stop generation; capacity warnings are returned with the successful result.`
+The plan is checked before writing. Missing targets, invalid chart data, and new object collisions stop generation; capacity warnings are returned with the successful result.`
 }
 
 func (t *pptxTemplateFillBuiltin) GetInputSchema() interface{} {
@@ -176,6 +178,11 @@ func (t *pptxTemplateFillBuiltin) GetInputSchema() interface{} {
 										"properties": map[string]interface{}{
 											"slot_id": stringProperty("Text slot ID from analysis."),
 											"text":    stringProperty("Replacement text."),
+											"preserve_line_breaks": map[string]interface{}{
+												"type":        "boolean",
+												"description": "Preserve explicit line breaks in a title. Defaults to false for single-line title slots.",
+												"default":     false,
+											},
 										},
 										"required": []string{"slot_id", "text"},
 									},

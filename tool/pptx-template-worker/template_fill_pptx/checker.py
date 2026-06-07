@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
-import unicodedata
 from typing import Any
 
 from .selectors import (
     _chart_selectors,
+    _collapse_title_lines,
     _replacement_selectors,
     _replacement_text,
     _table_selectors,
+)
+from .text_layout import (
+    estimate_text_layout,
+    fallback_font_size_px,
+    intersection_area,
+    occupied_rect,
+    visual_width,
 )
 
 
@@ -25,6 +32,13 @@ def _slot_lookup(library: dict[str, Any]) -> dict[tuple[int, str], dict[str, Any
             if slot.get("shape_name"):
                 lookup[(slide_index, f"shape_name:{slot['shape_name']}")] = slot
     return lookup
+
+
+def _slide_lookup(library: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    return {
+        int(slide.get("slide_index", 0)): slide
+        for slide in library.get("slides", [])
+    }
 
 
 def _table_lookup(library: dict[str, Any]) -> dict[tuple[int, str], dict[str, Any]]:
@@ -55,25 +69,19 @@ def _chart_lookup(library: dict[str, Any]) -> dict[tuple[int, str], dict[str, An
     return lookup
 
 
-def _visual_width(text: str) -> float:
-    """Estimate rendered text width in Latin-character units.
+def _table_cell(table: dict[str, Any], row: int, col: int) -> dict[str, Any] | None:
+    for row_item in table.get("rows", []):
+        if int(row_item.get("row", -1)) != row:
+            continue
+        return next(
+            (cell for cell in row_item.get("cells", []) if int(cell.get("col", -1)) == col),
+            None,
+        )
+    return None
 
-    ``len(text)`` is too crude for mixed CJK / Latin decks: Chinese characters
-    generally consume about twice the horizontal space of ASCII letters, while
-    punctuation and digits are narrower. The checker only needs a conservative
-    fit signal, so use Unicode East Asian Width instead of a font-specific
-    renderer.
-    """
-    width = 0.0
-    for char in "".join(text.split()):
-        east_asian_width = unicodedata.east_asian_width(char)
-        if east_asian_width in {"F", "W"}:
-            width += 2.0
-        elif east_asian_width == "A":
-            width += 1.5
-        else:
-            width += 1.0
-    return width
+
+def _visual_width(text: str) -> float:
+    return visual_width(text)
 
 
 def _display_width(value: float) -> int | float:
@@ -81,26 +89,16 @@ def _display_width(value: float) -> int | float:
 
 
 def _fallback_font_size_px(role: str, geometry: dict[str, Any], old_paragraphs: int) -> float:
-    height = geometry.get("height")
-    if isinstance(height, int) and old_paragraphs > 0:
-        inferred = height / max(old_paragraphs, 1) / 1.25
-        if 8 <= inferred <= 56:
-            return inferred
-    if role == "title_candidate":
-        return 28.0
-    if role == "body_candidate":
-        return 16.0
-    return 14.0
+    return fallback_font_size_px(role, geometry, old_paragraphs)
 
 
-def _geometry_capacity_width(
+def _geometry_capacity(
     *,
     role: str,
     old_paragraphs: int,
-    new_paragraphs: int,
     geometry: dict[str, Any],
     text_metrics: dict[str, Any],
-) -> float | None:
+) -> tuple[float, int] | None:
     width = geometry.get("width")
     height = geometry.get("height")
     if not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
@@ -110,18 +108,102 @@ def _geometry_capacity_width(
     if not isinstance(font_size_px, (int, float)) or font_size_px <= 0:
         font_size_px = _fallback_font_size_px(role, geometry, old_paragraphs)
 
-    line_height = max(font_size_px * 1.25, 1.0)
-    max_lines = max(int(height / line_height), old_paragraphs, new_paragraphs, 1)
-    horizontal_padding = 24 if width >= 180 else 12
+    margins = text_metrics.get("margins_px") or {}
+    horizontal_padding = margins.get("left", 12) + margins.get("right", 12)
+    vertical_padding = margins.get("top", 4) + margins.get("bottom", 4)
     usable_width = max(width - horizontal_padding, width * 0.72, 1)
+    usable_height = max(height - vertical_padding, height * 0.72, 1)
+    line_spacing = text_metrics.get("line_spacing")
+    if not isinstance(line_spacing, (int, float)) or line_spacing <= 0:
+        line_spacing = 1.25
+    absolute_line_spacing = text_metrics.get("line_spacing_px")
+    if isinstance(absolute_line_spacing, (int, float)) and absolute_line_spacing > 0:
+        line_height = absolute_line_spacing
+    else:
+        line_height = max(font_size_px * line_spacing, 1.0)
+    max_lines = max(int(usable_height / line_height), 1)
     latin_units_per_line = usable_width / max(font_size_px * 0.52, 1)
-    capacity = latin_units_per_line * max_lines
-
     if role == "label_candidate":
-        return capacity * 0.7
-    if role == "title_candidate":
-        return capacity * 0.85
-    return capacity
+        latin_units_per_line *= 0.7
+    elif role == "title_candidate":
+        latin_units_per_line *= 0.85
+    return latin_units_per_line, max_lines
+
+
+def _estimated_scale(
+    *,
+    text: str,
+    role: str,
+    old_paragraphs: int,
+    geometry: dict[str, Any],
+    text_metrics: dict[str, Any],
+    force_single_line: bool,
+) -> float | None:
+    return estimate_text_layout(
+        text=text,
+        role=role,
+        old_paragraphs=old_paragraphs,
+        geometry=geometry,
+        text_metrics=text_metrics,
+        single_line=force_single_line,
+    )["scale"]
+
+
+def _slot_layout(slot: dict[str, Any], text: str, single_line: bool) -> dict[str, Any]:
+    return estimate_text_layout(
+        text=text,
+        role=str(slot.get("role") or ""),
+        old_paragraphs=int(slot.get("paragraph_count") or 1),
+        geometry=slot.get("geometry") or {},
+        text_metrics=slot.get("text_metrics") or {},
+        single_line=single_line,
+    )
+
+
+def _collision_errors(
+    slide: dict[str, Any],
+    slot: dict[str, Any],
+    old_layout: dict[str, Any],
+    new_layout: dict[str, Any],
+) -> list[dict[str, Any]]:
+    old_rect = occupied_rect(slot.get("geometry") or {}, slot.get("text_metrics") or {}, old_layout)
+    new_rect = occupied_rect(slot.get("geometry") or {}, slot.get("text_metrics") or {}, new_layout)
+    if old_rect is None or new_rect is None:
+        return []
+    slot_id = str(slot.get("shape_id") or "")
+    slot_z = slot.get("z_order")
+    obstacles: list[dict[str, Any]] = []
+    for item in slide.get("objects", []):
+        if str(item.get("shape_id") or "") == slot_id:
+            continue
+        item_z = item.get("z_order")
+        kind = item.get("kind")
+        # Only objects painted above this text can visually cover it. Other
+        # text is checked regardless of order because glyphs can still overlap.
+        if not item.get("has_text") and (
+            not isinstance(slot_z, int) or not isinstance(item_z, int) or item_z <= slot_z
+        ):
+            continue
+        if kind == "cxnSp":
+            continue
+        obstacle_rect = item.get("geometry") or {}
+        old_overlap = intersection_area(old_rect, obstacle_rect)
+        new_overlap = intersection_area(new_rect, obstacle_rect)
+        growth = new_overlap - old_overlap
+        new_area = max(float(new_rect["width"]) * float(new_rect["height"]), 1.0)
+        if growth <= max(16.0, old_overlap * 0.25) or new_overlap / new_area < 0.03:
+            continue
+        obstacles.append(
+            {
+                "shape_id": item.get("shape_id"),
+                "shape_name": item.get("shape_name"),
+                "kind": kind,
+                "z_order": item_z,
+                "old_overlap_px2": round(old_overlap, 1),
+                "new_overlap_px2": round(new_overlap, 1),
+            }
+        )
+    return obstacles
 
 
 def _fit_status(
@@ -133,53 +215,67 @@ def _fit_status(
     new_paragraphs: int,
     geometry: dict[str, Any],
     text_metrics: dict[str, Any],
-) -> tuple[str, str]:
+    text: str,
+    force_single_line: bool,
+) -> tuple[str, str, float | None]:
     old_width = max(old_width, 1.0)
     ratio = new_width / old_width
     width = geometry.get("width")
     height = geometry.get("height")
-    capacity_width = _geometry_capacity_width(
+    capacity = _geometry_capacity(
         role=role,
         old_paragraphs=old_paragraphs,
-        new_paragraphs=new_paragraphs,
         geometry=geometry,
         text_metrics=text_metrics,
     )
+    capacity_width = capacity[0] * capacity[1] if capacity is not None else None
+    estimated_scale = _estimated_scale(
+        text=text,
+        role=role,
+        old_paragraphs=old_paragraphs,
+        geometry=geometry,
+        text_metrics=text_metrics,
+        force_single_line=force_single_line,
+    )
+    if estimated_scale is not None and estimated_scale < 0.55:
+        return "WARN", "text requires aggressive auto-fit shrinking and may be difficult to read", estimated_scale
+    if estimated_scale is not None and estimated_scale < 1:
+        return "WARN", "text will be auto-fit inside the original text box", estimated_scale
 
     if role == "label_candidate" or (old_width <= 8 and old_paragraphs <= 1):
         if capacity_width is not None and new_width <= capacity_width and not (old_width <= 8):
-            return "OK", "short label fits estimated text-box capacity"
+            return "OK", "short label fits estimated text-box capacity", estimated_scale
         label_limit = old_width
         if isinstance(width, int) and width >= 220:
             label_limit = max(label_limit, old_width * 1.25)
         if new_width > label_limit:
-            return "WARN", "short label exceeds original visual width; rewrite shorter"
-        return "OK", "short label fits original visual width"
+            return "WARN", "short label exceeds original visual width; rewrite shorter", estimated_scale
+        return "OK", "short label fits original visual width", estimated_scale
 
     if role == "title_candidate" and old_paragraphs <= 1:
         if capacity_width is not None and new_width <= capacity_width:
-            return "OK", "title fits estimated text-box capacity"
+            return "OK", "title fits estimated text-box capacity", estimated_scale
         limit = 1.15 if old_width <= 12 else 1.35
         if ratio > limit:
-            return "WARN", "title is too long for the original slot; rewrite first"
-        return "OK", "title stays near original capacity"
+            return "WARN", "title is too long for the original slot; rewrite first", estimated_scale
+        return "OK", "title stays near original capacity", estimated_scale
 
     paragraph_limit = max(old_paragraphs + 2, old_paragraphs * 2, 2)
     if new_paragraphs > paragraph_limit:
-        return "WARN", "body paragraph count changed too much; compress or split pages"
+        return "WARN", "body paragraph count changed too much; auto-fit may reduce readability", estimated_scale
 
     if isinstance(width, int) and isinstance(height, int) and width * height < 30000 and ratio > 2.0:
-        return "WARN", "small text box with much longer text; rewrite shorter"
+        return "WARN", "small text box with much longer text; auto-fit may reduce readability", estimated_scale
 
     if capacity_width is not None and new_width > capacity_width:
-        return "WARN", "text exceeds estimated text-box capacity; rewrite or split"
+        return "WARN", "text exceeds estimated text-box capacity and will be auto-fit", estimated_scale
 
     # Body text reflows, so a moderate amount of extra length is fine; only flag
     # gross overflow. Labels / titles keep their tighter guards above.
     body_limit = 3.0 if role == "body_candidate" else 2.2
     if ratio > body_limit:
-        return "WARN", "text is much longer than source slot; rewrite or choose another page"
-    return "OK", "within estimated slot capacity"
+        return "WARN", "text is much longer than source slot; auto-fit may reduce readability", estimated_scale
+    return "OK", "within estimated slot capacity", estimated_scale
 
 
 def _capacity_for_report(
@@ -187,25 +283,25 @@ def _capacity_for_report(
     role: str,
     old_width: float,
     old_paragraphs: int,
-    new_paragraphs: int,
     geometry: dict[str, Any],
     text_metrics: dict[str, Any],
 ) -> float | None:
-    capacity = _geometry_capacity_width(
+    capacity = _geometry_capacity(
         role=role,
         old_paragraphs=old_paragraphs,
-        new_paragraphs=new_paragraphs,
         geometry=geometry,
         text_metrics=text_metrics,
     )
     if capacity is None:
         return None
-    return _display_width(max(capacity, old_width))
+    units_per_line, max_lines = capacity
+    return _display_width(max(units_per_line * max_lines, old_width))
 
 
 def check_plan(library: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
     """Compare fill replacements against source slot capacity."""
     lookup = _slot_lookup(library)
+    slides_by_index = _slide_lookup(library)
     table_lookup = _table_lookup(library)
     chart_lookup = _chart_lookup(library)
     results: list[dict[str, Any]] = []
@@ -244,28 +340,46 @@ def check_plan(library: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
                 continue
 
             old_text = str(slot.get("text") or "")
+            role = str(slot.get("role") or "")
+            force_single_line = bool(slot.get("single_line")) and not bool(
+                replacement.get("preserve_line_breaks", False)
+            )
+            if force_single_line:
+                text = _collapse_title_lines(text)
             old_width = _visual_width(old_text)
             new_width = _visual_width(text)
             old_paragraphs = int(slot.get("paragraph_count") or 1)
             new_paragraphs = max(len([line for line in text.splitlines() if line.strip()]), 1)
-            status, message = _fit_status(
-                role=str(slot.get("role") or ""),
+            status, message, estimated_scale = _fit_status(
+                role=role,
                 old_width=old_width,
                 new_width=new_width,
                 old_paragraphs=old_paragraphs,
                 new_paragraphs=new_paragraphs,
                 geometry=slot.get("geometry") or {},
                 text_metrics=slot.get("text_metrics") or {},
+                text=text,
+                force_single_line=force_single_line,
             )
             capacity_width = _capacity_for_report(
-                role=str(slot.get("role") or ""),
+                role=role,
                 old_width=old_width,
                 old_paragraphs=old_paragraphs,
-                new_paragraphs=new_paragraphs,
                 geometry=slot.get("geometry") or {},
                 text_metrics=slot.get("text_metrics") or {},
             )
-            summary["warn" if status == "WARN" else "ok"] += 1
+            old_layout = _slot_layout(slot, old_text, bool(slot.get("single_line")))
+            new_layout = _slot_layout(slot, text, force_single_line)
+            collisions = _collision_errors(
+                slides_by_index.get(source_slide, {}),
+                slot,
+                old_layout,
+                new_layout,
+            )
+            if collisions:
+                status = "ERROR"
+                message = "replacement creates new overlap with another slide object"
+            summary[status.lower()] += 1
             results.append(
                 {
                     "status": status,
@@ -278,6 +392,17 @@ def check_plan(library: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
                     "old_visual_width": _display_width(old_width),
                     "new_visual_width": _display_width(new_width),
                     "capacity_visual_width": capacity_width,
+                    "estimated_font_scale_percent": (
+                        round(estimated_scale * 100, 1) if estimated_scale is not None else None
+                    ),
+                    "final_font_size_px": (
+                        round(float(new_layout["font_size_px"]), 2)
+                        if new_layout.get("font_size_px") is not None
+                        else None
+                    ),
+                    "estimated_line_count": new_layout.get("line_count"),
+                    "single_line": force_single_line,
+                    "collisions": collisions,
                     "ratio": round(new_width / max(old_width, 1.0), 2),
                     "old_paragraphs": old_paragraphs,
                     "new_paragraphs": new_paragraphs,
@@ -343,16 +468,41 @@ def check_plan(library: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
                     )
                     summary["error"] += 1
                     continue
-                summary["ok"] += 1
+                cell_slot = _table_cell(table, row, col) or {}
+                cell_text = str(cell.get("text", ""))
+                cell_layout = estimate_text_layout(
+                    text=cell_text,
+                    role="body_candidate",
+                    old_paragraphs=int(cell_slot.get("paragraph_count") or 1),
+                    geometry=cell_slot.get("geometry") or {},
+                    text_metrics=cell_slot.get("text_metrics") or {},
+                    single_line=False,
+                )
+                scale = cell_layout.get("scale")
+                status = "WARN" if isinstance(scale, (int, float)) and scale < 0.55 else "OK"
+                summary[status.lower()] += 1
                 results.append(
                     {
-                        "status": "OK",
+                        "status": status,
                         "plan_slide": slide_index,
                         "source_slide": source_slide,
                         "table_id": table.get("table_id"),
                         "row": row,
                         "col": col,
-                        "message": "table cell target exists",
+                        "estimated_font_scale_percent": (
+                            round(float(scale) * 100, 1) if isinstance(scale, (int, float)) else None
+                        ),
+                        "final_font_size_px": (
+                            round(float(cell_layout["font_size_px"]), 2)
+                            if cell_layout.get("font_size_px") is not None
+                            else None
+                        ),
+                        "estimated_line_count": cell_layout.get("line_count"),
+                        "message": (
+                            "table cell requires aggressive auto-fit shrinking"
+                            if status == "WARN"
+                            else "table cell target and capacity are valid"
+                        ),
                     }
                 )
         chart_edits = slide.get("chart_edits", [])

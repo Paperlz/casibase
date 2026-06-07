@@ -10,6 +10,21 @@ from __future__ import annotations
 from typing import Any
 
 
+def _is_ascii_word_char(value: str) -> bool:
+    return value.isascii() and value.isalnum()
+
+
+def _collapse_title_lines(value: str) -> str:
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    result = lines[0]
+    for line in lines[1:]:
+        separator = " " if _is_ascii_word_char(result[-1]) and _is_ascii_word_char(line[0]) else ""
+        result += separator + line
+    return result
+
+
 def _plain_len(value: str) -> int:
     return len("".join(value.split()))
 

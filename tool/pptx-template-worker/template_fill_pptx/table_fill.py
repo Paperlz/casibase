@@ -29,8 +29,14 @@ def _apply_table_edits_to_slide(
     *,
     source_slide: int,
     table_edits: list[dict[str, Any]],
+    tables: list[dict[str, Any]] | None = None,
 ) -> None:
     maps = _table_key_maps(slide_root, source_slide)
+    table_metadata: dict[str, dict[str, Any]] = {}
+    for table in tables or []:
+        for field in ("table_id", "shape_id", "shape_name"):
+            if table.get(field):
+                table_metadata[f"{field}:{table[field]}"] = table
     errors: list[str] = []
     for table_edit in table_edits:
         selectors = _table_selectors(table_edit)
@@ -41,6 +47,7 @@ def _apply_table_edits_to_slide(
             errors.append(", ".join(selectors) or "<missing selector>")
             continue
         rows = table_frame.findall(".//a:tbl/a:tr", NS)
+        metadata = next((table_metadata[key] for key in selectors if key in table_metadata), {})
         cells = table_edit.get("cells", [])
         if not isinstance(cells, list):
             raise RuntimeError(f"Slide {source_slide} table edit cells must be a list")
@@ -54,6 +61,22 @@ def _apply_table_edits_to_slide(
             if col_index < 0 or col_index >= len(row_cells):
                 errors.append(f"{selectors[0] if selectors else '<table>'} row={row_index} col={col_index}")
                 continue
-            _set_container_text(row_cells[col_index], _table_cell_text(cell_edit))
+            cell_slot = next(
+                (
+                    cell
+                    for row_item in metadata.get("rows", [])
+                    if int(row_item.get("row", -1)) == row_index
+                    for cell in row_item.get("cells", [])
+                    if int(cell.get("col", -1)) == col_index
+                ),
+                None,
+            )
+            if cell_slot:
+                cell_slot = {**cell_slot, "role": "body_candidate", "single_line": False}
+            _set_container_text(
+                row_cells[col_index],
+                _table_cell_text(cell_edit),
+                slot=cell_slot,
+            )
     if errors:
         raise RuntimeError(f"Invalid table edit target(s) on slide {source_slide}: {'; '.join(errors)}")

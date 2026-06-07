@@ -46,6 +46,7 @@ def apply_plan(
     *,
     transition: str | None = DEFAULT_TRANSITION,
     transition_duration: float = DEFAULT_TRANSITION_DURATION,
+    library: dict[str, Any] | None = None,
 ) -> None:
     """Create a filled PPTX by cloning selected source slides and replacing text."""
     plan_slides = plan.get("slides")
@@ -76,6 +77,10 @@ def apply_plan(
     next_chart_number = _max_chart_part_number(entries)
     next_embedding_number = _max_embedding_part_number(entries)
     allocate_part = _make_part_allocator(entries)
+    library_slides = {
+        int(slide.get("slide_index", 0)): slide
+        for slide in (library or {}).get("slides", [])
+    }
 
     for offset, item in enumerate(plan_slides):
         source_slide = int(item.get("source_slide", 0))
@@ -95,6 +100,7 @@ def apply_plan(
             slide_root,
             source_slide=source_slide,
             replacements=replacements,
+            slots=library_slides.get(source_slide, {}).get("slots", []),
         )
         table_edits = item.get("table_edits", [])
         if not isinstance(table_edits, list):
@@ -103,6 +109,7 @@ def apply_plan(
             slide_root,
             source_slide=source_slide,
             table_edits=table_edits,
+            tables=library_slides.get(source_slide, {}).get("tables", []),
         )
         slide_effect, slide_duration, slide_advance = _resolve_slide_transition(
             item,
