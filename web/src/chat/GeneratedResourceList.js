@@ -23,6 +23,61 @@ const cardStyle = {width: "100%"};
 const rowStyle = {width: "100%"};
 const metaStyle = {flex: 1, minWidth: 0};
 const tagStyle = {width: "fit-content", marginInlineEnd: 0};
+const officeAvatarStyle = {backgroundColor: "transparent"};
+
+const officeIconConfig = {
+  word: {
+    color: "#185ABD",
+    panelColor: "#2B7CD3",
+    letter: "W",
+  },
+  excel: {
+    color: "#107C41",
+    panelColor: "#21A366",
+    letter: "X",
+  },
+  powerpoint: {
+    color: "#C43E1C",
+    panelColor: "#ED6C47",
+    letter: "P",
+  },
+};
+
+function OfficeFileIcon({type}) {
+  const config = officeIconConfig[type];
+
+  return (
+    <svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true">
+      <rect x="14" y="4" width="30" height="40" rx="4" fill={config.panelColor} />
+      {type === "excel" ? (
+        <>
+          <path d="M28 12h10M28 20h10M28 28h10M28 36h10M28 12v24M38 12v24" stroke="#FFFFFF" strokeWidth="2" opacity="0.85" />
+        </>
+      ) : type === "powerpoint" ? (
+        <>
+          <circle cx="31" cy="24" r="9" fill="#FFFFFF" opacity="0.9" />
+          <path d="M31 15a9 9 0 0 1 9 9h-9z" fill={config.color} />
+        </>
+      ) : (
+        <>
+          <path d="M27 14h11M27 20h11M27 26h11M27 32h8" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" opacity="0.9" />
+        </>
+      )}
+      <rect x="4" y="10" width="25" height="28" rx="3" fill={config.color} />
+      <text
+        x="16.5"
+        y="30"
+        fill="#FFFFFF"
+        fontFamily="Arial, sans-serif"
+        fontSize="18"
+        fontWeight="700"
+        textAnchor="middle"
+      >
+        {config.letter}
+      </text>
+    </svg>
+  );
+}
 
 function getFileExt(fileName, mimeType) {
   if (fileName) {
@@ -38,6 +93,26 @@ function getFileExt(fileName, mimeType) {
     }
   }
   return "FILE";
+}
+
+function getFileIcon(ext) {
+  switch (ext.toLowerCase()) {
+  case "docx":
+    return <OfficeFileIcon type="word" />;
+  case "xlsx":
+  case "csv":
+    return <OfficeFileIcon type="excel" />;
+  case "pptx":
+    return <OfficeFileIcon type="powerpoint" />;
+  case "txt":
+    return <FileTextOutlined />;
+  default:
+    return <FileTextOutlined />;
+  }
+}
+
+function isOfficeFile(ext) {
+  return ["docx", "xlsx", "csv", "pptx"].includes(ext.toLowerCase());
 }
 
 async function downloadResource(e, href, fileName) {
@@ -98,7 +173,12 @@ const GeneratedResourceList = ({resources}) => {
         return (
           <Card key={`${resource.uri}-${idx}`} size="small" style={cardStyle}>
             <Flex align="center" gap="middle" style={rowStyle}>
-              <Avatar shape="square" size={48} icon={<FileTextOutlined />} />
+              <Avatar
+                shape="square"
+                size={48}
+                style={isOfficeFile(ext) ? officeAvatarStyle : undefined}
+                icon={getFileIcon(ext)}
+              />
               <Flex vertical gap={2} style={metaStyle}>
                 <Typography.Text strong ellipsis={{tooltip: fileName}}>
                   {fileName}
