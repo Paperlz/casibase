@@ -22,27 +22,25 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
-	"github.com/the-open-agent/openagent/embedsupport"
+	ooxmlpkg "github.com/the-open-agent/openagent/package"
 )
 
 const (
 	pptxTemplateDownloadLimit = 100 << 20
-	pptxTemplateWorkerTimeout = 5 * time.Minute
 )
 
-type pptxTemplateAnalyzeBuiltin struct{}
-type pptxTemplateFillBuiltin struct{}
+type (
+	pptxTemplateAnalyzeBuiltin struct{}
+	pptxTemplateFillBuiltin    struct{}
+)
 
 type pptxTemplateAnalyzeArgs struct {
 	Template string `json:"template"`
@@ -54,29 +52,6 @@ type pptxTemplateFillArgs struct {
 	Plan               json.RawMessage `json:"plan"`
 	Transition         string          `json:"transition,omitempty"`
 	TransitionDuration float64         `json:"transition_duration,omitempty"`
-}
-
-type pptxTemplateWorkerSpec struct {
-	Action             string          `json:"action"`
-	Template           string          `json:"template"`
-	Output             string          `json:"output,omitempty"`
-	Plan               json.RawMessage `json:"plan,omitempty"`
-	Transition         string          `json:"transition,omitempty"`
-	TransitionDuration float64         `json:"transition_duration,omitempty"`
-}
-
-type pptxTemplateWorkerResult struct {
-	OK          bool            `json:"ok"`
-	Error       string          `json:"error"`
-	Path        string          `json:"path"`
-	SlideCount  int             `json:"slide_count"`
-	Library     json.RawMessage `json:"library"`
-	CheckReport json.RawMessage `json:"check_report"`
-}
-
-type pythonCommand struct {
-	path string
-	args []string
 }
 
 func (t *pptxTemplateAnalyzeBuiltin) GetName() string { return "pptx_template_analyze" }
@@ -116,22 +91,16 @@ func (t *pptxTemplateAnalyzeBuiltin) Execute(ctx context.Context, arguments map[
 	}
 	defer cleanup()
 
-	result, err := runPptxTemplateWorker(ctx, pptxTemplateWorkerSpec{
-		Action:   "analyze",
-		Template: templatePath,
-	})
+	library, err := ooxmlpkg.AnalyzeFile(templatePath, ooxmlpkg.DefaultLimits())
 	if err != nil {
 		return officeToolError(fmt.Sprintf("Failed to analyze PowerPoint template: %s", err.Error())), nil
 	}
-	if len(result.Library) == 0 {
-		return officeToolError("Failed to analyze PowerPoint template: worker returned no slide library"), nil
-	}
 
-	var pretty bytes.Buffer
-	if err := json.Indent(&pretty, result.Library, "", "  "); err != nil {
-		return officeToolError(fmt.Sprintf("Failed to parse template analysis: %s", err.Error())), nil
+	data, err := json.MarshalIndent(library, "", "  ")
+	if err != nil {
+		return officeToolError(fmt.Sprintf("Failed to encode template analysis: %s", err.Error())), nil
 	}
-	return officeToolText(pretty.String()), nil
+	return officeToolText(string(data)), nil
 }
 
 func (t *pptxTemplateFillBuiltin) GetName() string { return "pptx_template_fill" }
@@ -285,11 +254,11 @@ func (t *pptxTemplateFillBuiltin) Execute(ctx context.Context, arguments map[str
 	if len(bytes.TrimSpace(args.Plan)) == 0 || bytes.Equal(bytes.TrimSpace(args.Plan), []byte("null")) {
 		return officeToolError("Missing required parameter: plan"), nil
 	}
-	var plan map[string]interface{}
+	var plan ooxmlpkg.Plan
 	if err := json.Unmarshal(args.Plan, &plan); err != nil {
 		return officeToolError(fmt.Sprintf("Invalid plan: %s", err.Error())), nil
 	}
-	if plan["schema"] != "template_fill_pptx_plan.v1" {
+	if plan.Schema != ooxmlpkg.PlanSchema {
 		return officeToolError("Invalid plan: schema must be template_fill_pptx_plan.v1"), nil
 	}
 
@@ -308,29 +277,114 @@ func (t *pptxTemplateFillBuiltin) Execute(ctx context.Context, arguments map[str
 		duration = 0.5
 	}
 	outputPath := ResolveOutputPath(args.Path)
-	result, err := runPptxTemplateWorker(ctx, pptxTemplateWorkerSpec{
-		Action:             "fill",
-		Template:           templatePath,
-		Output:             outputPath,
-		Plan:               args.Plan,
-		Transition:         transition,
-		TransitionDuration: duration,
-	})
+	library, err := ooxmlpkg.AnalyzeFile(templatePath, ooxmlpkg.DefaultLimits())
 	if err != nil {
 		return officeToolError(fmt.Sprintf("Failed to fill PowerPoint template: %s", err.Error())), nil
 	}
-
-	report := "none"
-	if len(result.CheckReport) != 0 {
-		var pretty bytes.Buffer
-		if json.Indent(&pretty, result.CheckReport, "", "  ") == nil {
-			report = pretty.String()
+	validationReport, err := ooxmlpkg.FillFile(
+		templatePath,
+		outputPath,
+		&plan,
+		ooxmlpkg.ApplyOptions{
+			Transition:         transition,
+			TransitionDuration: duration,
+			Library:            library,
+		},
+		ooxmlpkg.DefaultLimits(),
+	)
+	if err != nil {
+		if validationReport != nil {
+			if reportData, marshalErr := json.MarshalIndent(compactPptxCheckReport(validationReport), "", "  "); marshalErr == nil {
+				return officeToolError(fmt.Sprintf(
+					"Failed to fill PowerPoint template: %s\nValidation report:\n%s",
+					err.Error(), reportData,
+				)), nil
+			}
 		}
+		return officeToolError(fmt.Sprintf("Failed to fill PowerPoint template: %s", err.Error())), nil
+	}
+
+	reportText := "none"
+	if reportData, marshalErr := json.MarshalIndent(compactPptxCheckReport(validationReport), "", "  "); marshalErr == nil {
+		reportText = string(reportData)
 	}
 	return officeToolText(fmt.Sprintf(
 		"Successfully filled PowerPoint template: %s\n%d slide(s) written\nValidation report:\n%s",
-		result.Path, result.SlideCount, report,
+		outputPath, len(plan.Slides), reportText,
 	)), nil
+}
+
+func compactPptxCheckReport(report *ooxmlpkg.CheckReport) *ooxmlpkg.CheckReport {
+	if report == nil {
+		return nil
+	}
+	compact := &ooxmlpkg.CheckReport{
+		Schema:  report.Schema,
+		Summary: report.Summary,
+		Results: []ooxmlpkg.CheckResult{},
+	}
+	for _, item := range report.Results {
+		status, _ := item["status"].(string)
+		scale, hasScale := checkResultNumber(item["estimated_font_scale_percent"])
+		chartLabelsFit, hasChartFit := item["category_labels_fit"].(bool)
+		if status != "ERROR" && !(status == "WARN" && ((hasScale && scale < 60) || (hasChartFit && !chartLabelsFit))) {
+			continue
+		}
+		result := ooxmlpkg.CheckResult{}
+		for _, key := range []string{
+			"status", "plan_slide", "source_slide", "slot_id", "table_id", "chart_id", "selector",
+			"new_text", "message", "estimated_font_scale_percent", "capacity_visual_width", "collisions",
+			"category_axis_font_size_pt", "category_label_area_percent", "category_labels_fit",
+			"longest_category", "longest_category_visual_width", "suggested_max_visual_width",
+		} {
+			if value, ok := item[key]; ok {
+				result[key] = value
+			}
+		}
+		if capacity, ok := item["capacity_visual_width"]; ok {
+			result["suggested_max_visual_width"] = capacity
+		}
+		result["suggestion"] = pptxCheckSuggestion(item)
+		compact.Results = append(compact.Results, result)
+	}
+	return compact
+}
+
+func pptxCheckSuggestion(item ooxmlpkg.CheckResult) string {
+	status, _ := item["status"].(string)
+	message, _ := item["message"].(string)
+	switch {
+	case strings.Contains(message, "overlap"):
+		return "Shorten this replacement or choose a source slide with more space; the generated text would overlap another object."
+	case strings.Contains(message, "target not found"):
+		return "Re-run pptx_template_analyze and use an exact slot, table, or chart ID from the returned library."
+	case strings.Contains(message, "out of bounds"):
+		return "Use a row and column that exist in the analyzed table."
+	case strings.Contains(message, "chart"):
+		if labelsFit, ok := item["category_labels_fit"].(bool); ok && !labelsFit {
+			return "Shorten the longest category label; the chart already uses the maximum label area and minimum 8pt axis font."
+		}
+		return "Make every chart series contain exactly one value for each category."
+	case status == "WARN":
+		return "Shorten this text or choose a larger slot to avoid very small rendered text."
+	default:
+		return "Revise this plan item using the analyzed template metadata, then retry."
+	}
+}
+
+func checkResultNumber(value interface{}) (float64, bool) {
+	switch number := value.(type) {
+	case float64:
+		return number, true
+	case float32:
+		return float64(number), true
+	case int:
+		return float64(number), true
+	case int64:
+		return float64(number), true
+	default:
+		return 0, false
+	}
 }
 
 func decodePptxTemplateArguments(arguments map[string]interface{}, target interface{}) *protocol.CallToolResult {
@@ -454,142 +508,4 @@ func validatePptxPackage(path string) error {
 		}
 	}
 	return nil
-}
-
-func runPptxTemplateWorker(ctx context.Context, spec pptxTemplateWorkerSpec) (*pptxTemplateWorkerResult, error) {
-	python, err := findPptxTemplatePython()
-	if err != nil {
-		return nil, err
-	}
-	workerPath, cleanup, err := findPptxTemplateWorkerPath()
-	if err != nil {
-		return nil, err
-	}
-	defer cleanup()
-
-	specFile, err := os.CreateTemp("", "openagent-pptx-template-*.json")
-	if err != nil {
-		return nil, err
-	}
-	specPath := specFile.Name()
-	defer os.Remove(specPath)
-	if err := json.NewEncoder(specFile).Encode(spec); err != nil {
-		specFile.Close()
-		return nil, err
-	}
-	if err := specFile.Close(); err != nil {
-		return nil, err
-	}
-
-	workerCtx, cancel := context.WithTimeout(ctx, pptxTemplateWorkerTimeout)
-	defer cancel()
-	commandArgs := append(append([]string{}, python.args...), workerPath, specPath)
-	cmd := exec.CommandContext(workerCtx, python.path, commandArgs...)
-	cmd.Dir = filepath.Dir(workerPath)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	runErr := cmd.Run()
-
-	var result pptxTemplateWorkerResult
-	parseErr := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &result)
-	if runErr != nil {
-		if errors.Is(workerCtx.Err(), context.DeadlineExceeded) {
-			return nil, fmt.Errorf("Python worker timed out after %s", pptxTemplateWorkerTimeout)
-		}
-		if parseErr == nil && result.Error != "" {
-			if len(result.CheckReport) > 0 {
-				var pretty bytes.Buffer
-				if json.Indent(&pretty, result.CheckReport, "", "  ") == nil {
-					return nil, fmt.Errorf("%s\nValidation report:\n%s", result.Error, pretty.String())
-				}
-			}
-			return nil, errors.New(result.Error)
-		}
-		detail := strings.TrimSpace(stderr.String())
-		if detail == "" {
-			detail = runErr.Error()
-		}
-		return nil, fmt.Errorf("Python worker failed: %s", detail)
-	}
-	if parseErr != nil {
-		return nil, fmt.Errorf("invalid Python worker output: %w", parseErr)
-	}
-	if !result.OK {
-		return nil, errors.New(result.Error)
-	}
-	return &result, nil
-}
-
-func findPptxTemplatePython() (pythonCommand, error) {
-	if configured := strings.TrimSpace(os.Getenv("OPENAGENT_PYTHON")); configured != "" {
-		path, err := exec.LookPath(configured)
-		if err != nil {
-			return pythonCommand{}, fmt.Errorf("OPENAGENT_PYTHON was not found: %s", configured)
-		}
-		return pythonCommand{path: path}, nil
-	}
-	for _, name := range []string{"python3", "python"} {
-		if path, err := exec.LookPath(name); err == nil {
-			return pythonCommand{path: path}, nil
-		}
-	}
-	if runtime.GOOS == "windows" {
-		if path, err := exec.LookPath("py"); err == nil {
-			return pythonCommand{path: path, args: []string{"-3"}}, nil
-		}
-	}
-	return pythonCommand{}, errors.New("Python was not found; install Python 3.10 or newer or set OPENAGENT_PYTHON")
-}
-
-func findPptxTemplateWorkerPath() (string, func(), error) {
-	var candidates []string
-	if exeDir, err := pptxExecutableDir(); err == nil {
-		candidates = append(candidates, filepath.Join(exeDir, "pptx-template-worker", "worker.py"))
-	}
-	candidates = append(candidates,
-		filepath.Join("tool", "pptx-template-worker", "worker.py"),
-		filepath.Join("pptx-template-worker", "worker.py"),
-	)
-	for _, candidate := range candidates {
-		info, err := os.Stat(candidate)
-		if err != nil || info.IsDir() {
-			continue
-		}
-		absolute, absErr := filepath.Abs(candidate)
-		if absErr == nil {
-			candidate = absolute
-		}
-		return candidate, func() {}, nil
-	}
-
-	embedded := embedsupport.PptxTemplateWorkerFS()
-	if embedded == nil {
-		return "", func() {}, errors.New("PPTX template worker not found; build with -tags embed or place it in pptx-template-worker")
-	}
-	root, err := os.MkdirTemp("", "openagent-pptx-template-worker-*")
-	if err != nil {
-		return "", func() {}, err
-	}
-	cleanup := func() { _ = os.RemoveAll(root) }
-	err = fs.WalkDir(embedded, ".", func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		target := filepath.Join(root, filepath.FromSlash(path))
-		if entry.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		data, readErr := fs.ReadFile(embedded, path)
-		if readErr != nil {
-			return readErr
-		}
-		return os.WriteFile(target, data, 0o644)
-	})
-	if err != nil {
-		cleanup()
-		return "", func() {}, fmt.Errorf("failed to extract embedded PPTX template worker: %w", err)
-	}
-	return filepath.Join(root, "worker.py"), cleanup, nil
 }
