@@ -18,8 +18,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -57,7 +55,7 @@ type Message struct {
 	ErrorText            string               `xorm:"mediumtext" json:"errorText"`
 	FileName             string               `xorm:"varchar(100)" json:"fileName"`
 	Comment              string               `xorm:"mediumtext" json:"comment"`
-	ParsedAttachmentText string               `xorm:"mediumtext" json:"parsedAttachmentText"`
+	ParsedAttachmentText string               `xorm:"mediumtext" json:"-"`
 	TokenCount           int                  `json:"tokenCount"`
 	TextTokenCount       int                  `json:"textTokenCount"`
 	Price                float64              `json:"price"`
@@ -226,6 +224,7 @@ func dataURLMimeType(dataURL string) string {
 
 func RefineMessageFiles(message *Message, origin string, lang string) error {
 	text := message.Text
+	parsedTexts := map[string]string{}
 	// re := regexp.MustCompile(`data:image\/([a-zA-Z]*);base64,([^"]*)`)
 	re := regexp.MustCompile(`data:([a-zA-Z0-9][a-zA-Z0-9!#$&^_.+\-]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+\-]*);base64,[a-zA-Z0-9+/=_-]+`)
 	matches := re.FindAllString(text, -1)
@@ -267,8 +266,6 @@ func RefineMessageFiles(message *Message, origin string, lang string) error {
 			return err
 		}
 
-		parsedTexts := make(map[string]string)
-
 		for _, match := range matches {
 			var content []byte
 			content, err = parseBase64Image(match, lang)
@@ -298,53 +295,42 @@ func RefineMessageFiles(message *Message, origin string, lang string) error {
 			mimeType := dataURLMimeType(match)
 			if !strings.HasPrefix(mimeType, "image/") {
 				displayName := httpUrl[strings.LastIndex(httpUrl, "/")+1:]
-				replacement := parseAndFormatAttachment(content, displayName, httpUrl, lang)
-				if replacement != "" {
-					parsedTexts[httpUrl] = replacement
+				replacement, err := parseAndFormatAttachment(content, displayName, httpUrl, lang)
+				if err != nil {
+					return err
 				}
+				parsedTexts[httpUrl] = replacement
 			}
 
 			text = strings.Replace(text, match, httpUrl, 1)
 		}
+	}
 
-		if len(parsedTexts) > 0 {
-			bs, err := json.Marshal(parsedTexts)
-			if err == nil {
-				message.ParsedAttachmentText = string(bs)
-			}
+	if len(parsedTexts) > 0 {
+		bs, err := json.Marshal(parsedTexts)
+		if err != nil {
+			return err
 		}
+		message.ParsedAttachmentText = string(bs)
 	}
 
 	message.Text = text
 	return nil
 }
 
-func parseAndFormatAttachment(content []byte, displayName string, httpUrl string, lang string) string {
+func parseAndFormatAttachment(content []byte, displayName string, httpUrl string, lang string) (string, error) {
 	p := strings.LastIndex(displayName, ".")
 	if p < 0 {
-		return ""
+		return "", fmt.Errorf(i18n.Translate(lang, "txt:unsupported file type: %s"), "")
 	}
 	ext := displayName[p:]
 
-	tmpFile, err := ioutil.TempFile("", "openagent-attachment-*"+displayName)
+	parsed, err := txt.GetParsedTextFromBytes(content, ext, lang)
 	if err != nil {
-		return ""
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-
-	if _, err := tmpFile.Write(content); err != nil {
-		tmpFile.Close()
-		return ""
-	}
-	tmpFile.Close()
-
-	parsed, err := txt.GetParsedTextFromUrl(tmpPath, ext, lang)
-	if err != nil {
-		return ""
+		return "", err
 	}
 
-	return fmt.Sprintf("[Attachment \"%s\"](%s):\n\n%s\n\n", displayName, httpUrl, parsed)
+	return fmt.Sprintf("[Attachment \"%s\"](%s):\n\n%s\n\n", displayName, httpUrl, parsed), nil
 }
 
 func AddMessage(message *Message) (bool, error) {

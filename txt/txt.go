@@ -17,6 +17,7 @@ package txt
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/beego/beego/logs"
@@ -66,4 +67,27 @@ func GetParsedTextFromUrl(url string, ext string, lang string) (string, error) {
 	}
 
 	return res, nil
+}
+
+func GetParsedTextFromBytes(content []byte, ext string, lang string) (string, error) {
+	tmpFile, err := os.CreateTemp("", "openagent-attachment-*"+filepath.Clean(ext))
+	if err != nil {
+		return "", err
+	}
+	path := tmpFile.Name()
+	defer func() {
+		if err := os.Remove(path); err != nil {
+			logs.Error("%v", err.Error())
+		}
+	}()
+
+	if _, err = tmpFile.Write(content); err != nil {
+		tmpFile.Close()
+		return "", err
+	}
+	if err = tmpFile.Close(); err != nil {
+		return "", err
+	}
+
+	return GetParsedTextFromUrl(path, ext, lang)
 }

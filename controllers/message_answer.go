@@ -247,14 +247,14 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 
 		question = questionMessage.Text
 
-		// Replace file CDN URLs in the question with their parsed text content
-		// stored in ParsedAttachmentText during RefineMessageFiles.
 		if questionMessage.ParsedAttachmentText != "" {
 			var parsedTexts map[string]string
-			if err := json.Unmarshal([]byte(questionMessage.ParsedAttachmentText), &parsedTexts); err == nil {
-				for urlStr, replacement := range parsedTexts {
-					question = strings.Replace(question, urlStr, replacement, 1)
-				}
+			if err := json.Unmarshal([]byte(questionMessage.ParsedAttachmentText), &parsedTexts); err != nil {
+				responseErrorStream(message, err.Error())
+				return
+			}
+			for urlStr, replacement := range parsedTexts {
+				question = strings.Replace(question, urlStr, replacement, 1)
 			}
 		}
 
