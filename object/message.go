@@ -16,6 +16,7 @@ package object
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -45,35 +46,36 @@ type Message struct {
 	Name        string `xorm:"varchar(100) notnull pk" json:"name"`
 	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
 
-	Organization      string               `xorm:"varchar(100)" json:"organization"`
-	Store             string               `xorm:"varchar(100)" json:"store"`
-	User              string               `xorm:"varchar(100) index" json:"user"`
-	Chat              string               `xorm:"varchar(100) index" json:"chat"`
-	ReplyTo           string               `xorm:"varchar(100) index" json:"replyTo"`
-	Author            string               `xorm:"varchar(100)" json:"author"`
-	Text              string               `xorm:"mediumtext" json:"text"`
-	ReasonText        string               `xorm:"mediumtext" json:"reasonText"`
-	ErrorText         string               `xorm:"mediumtext" json:"errorText"`
-	FileName          string               `xorm:"varchar(100)" json:"fileName"`
-	Comment           string               `xorm:"mediumtext" json:"comment"`
-	TokenCount        int                  `json:"tokenCount"`
-	TextTokenCount    int                  `json:"textTokenCount"`
-	Price             float64              `json:"price"`
-	Currency          string               `xorm:"varchar(100)" json:"currency"`
-	IsHidden          bool                 `json:"isHidden"`
-	IsDeleted         bool                 `json:"isDeleted"`
-	NeedNotify        bool                 `json:"needNotify"`
-	IsAlerted         bool                 `json:"isAlerted"`
-	IsRegenerated     bool                 `json:"isRegenerated"`
-	WebSearchEnabled  bool                 `json:"webSearchEnabled"`
-	ModelProvider     string               `xorm:"varchar(100)" json:"modelProvider"`
-	EmbeddingProvider string               `xorm:"varchar(100)" json:"embeddingProvider"`
-	VectorScores      []VectorScore        `xorm:"mediumtext" json:"vectorScores"`
-	LikeUsers         []string             `json:"likeUsers"`
-	DisLikeUsers      []string             `json:"dislikeUsers"`
-	Suggestions       []Suggestion         `json:"suggestions"`
-	ToolCalls         []model.ToolCall     `xorm:"mediumtext" json:"toolCalls"`
-	SearchResults     []model.SearchResult `xorm:"mediumtext" json:"searchResults"`
+	Organization         string               `xorm:"varchar(100)" json:"organization"`
+	Store                string               `xorm:"varchar(100)" json:"store"`
+	User                 string               `xorm:"varchar(100) index" json:"user"`
+	Chat                 string               `xorm:"varchar(100) index" json:"chat"`
+	ReplyTo              string               `xorm:"varchar(100) index" json:"replyTo"`
+	Author               string               `xorm:"varchar(100)" json:"author"`
+	Text                 string               `xorm:"mediumtext" json:"text"`
+	ReasonText           string               `xorm:"mediumtext" json:"reasonText"`
+	ErrorText            string               `xorm:"mediumtext" json:"errorText"`
+	FileName             string               `xorm:"varchar(100)" json:"fileName"`
+	Comment              string               `xorm:"mediumtext" json:"comment"`
+	ParsedAttachmentText string               `xorm:"mediumtext" json:"parsedAttachmentText"`
+	TokenCount           int                  `json:"tokenCount"`
+	TextTokenCount       int                  `json:"textTokenCount"`
+	Price                float64              `json:"price"`
+	Currency             string               `xorm:"varchar(100)" json:"currency"`
+	IsHidden             bool                 `json:"isHidden"`
+	IsDeleted            bool                 `json:"isDeleted"`
+	NeedNotify           bool                 `json:"needNotify"`
+	IsAlerted            bool                 `json:"isAlerted"`
+	IsRegenerated        bool                 `json:"isRegenerated"`
+	WebSearchEnabled     bool                 `json:"webSearchEnabled"`
+	ModelProvider        string               `xorm:"varchar(100)" json:"modelProvider"`
+	EmbeddingProvider    string               `xorm:"varchar(100)" json:"embeddingProvider"`
+	VectorScores         []VectorScore        `xorm:"mediumtext" json:"vectorScores"`
+	LikeUsers            []string             `json:"likeUsers"`
+	DisLikeUsers         []string             `json:"dislikeUsers"`
+	Suggestions          []Suggestion         `json:"suggestions"`
+	ToolCalls            []model.ToolCall     `xorm:"mediumtext" json:"toolCalls"`
+	SearchResults        []model.SearchResult `xorm:"mediumtext" json:"searchResults"`
 
 	TransactionId string `xorm:"varchar(100)" json:"transactionId"`
 }
@@ -265,6 +267,8 @@ func RefineMessageFiles(message *Message, origin string, lang string) error {
 			return err
 		}
 
+		parsedTexts := make(map[string]string)
+
 		for _, match := range matches {
 			var content []byte
 			content, err = parseBase64Image(match, lang)
@@ -293,28 +297,26 @@ func RefineMessageFiles(message *Message, origin string, lang string) error {
 
 			mimeType := dataURLMimeType(match)
 			if !strings.HasPrefix(mimeType, "image/") {
-				displayName := lastURIPath(httpUrl)
+				displayName := httpUrl[strings.LastIndex(httpUrl, "/")+1:]
 				replacement := parseAndFormatAttachment(content, displayName, httpUrl, lang)
 				if replacement != "" {
-					text = strings.Replace(text, match, replacement, 1)
-					continue
+					parsedTexts[httpUrl] = replacement
 				}
 			}
 
 			text = strings.Replace(text, match, httpUrl, 1)
 		}
+
+		if len(parsedTexts) > 0 {
+			bs, err := json.Marshal(parsedTexts)
+			if err == nil {
+				message.ParsedAttachmentText = string(bs)
+			}
+		}
 	}
 
 	message.Text = text
 	return nil
-}
-
-func lastURIPath(httpUrl string) string {
-	idx := strings.LastIndex(httpUrl, "/")
-	if idx < 0 || idx == len(httpUrl)-1 {
-		return httpUrl
-	}
-	return httpUrl[idx+1:]
 }
 
 func parseAndFormatAttachment(content []byte, displayName string, httpUrl string, lang string) string {
