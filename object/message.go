@@ -322,7 +322,7 @@ func parseAndFormatAttachment(content []byte, displayName string, httpUrl string
 	if p < 0 {
 		return ""
 	}
-	ext := displayName[p+1:]
+	ext := displayName[p:]
 
 	tmpFile, err := ioutil.TempFile("", "openagent-attachment-*"+displayName)
 	if err != nil {
