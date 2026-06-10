@@ -17,12 +17,15 @@ package object
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/model"
+	"github.com/the-open-agent/openagent/txt"
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
 )
@@ -288,12 +291,58 @@ func RefineMessageFiles(message *Message, origin string, lang string) error {
 				return err
 			}
 
+			mimeType := dataURLMimeType(match)
+			if !strings.HasPrefix(mimeType, "image/") {
+				displayName := lastURIPath(httpUrl)
+				replacement := parseAndFormatAttachment(content, displayName, httpUrl, lang)
+				if replacement != "" {
+					text = strings.Replace(text, match, replacement, 1)
+					continue
+				}
+			}
+
 			text = strings.Replace(text, match, httpUrl, 1)
 		}
 	}
 
 	message.Text = text
 	return nil
+}
+
+func lastURIPath(httpUrl string) string {
+	idx := strings.LastIndex(httpUrl, "/")
+	if idx < 0 || idx == len(httpUrl)-1 {
+		return httpUrl
+	}
+	return httpUrl[idx+1:]
+}
+
+func parseAndFormatAttachment(content []byte, displayName string, httpUrl string, lang string) string {
+	p := strings.LastIndex(displayName, ".")
+	if p < 0 {
+		return ""
+	}
+	ext := displayName[p+1:]
+
+	tmpFile, err := ioutil.TempFile("", "openagent-attachment-*"+displayName)
+	if err != nil {
+		return ""
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := tmpFile.Write(content); err != nil {
+		tmpFile.Close()
+		return ""
+	}
+	tmpFile.Close()
+
+	parsed, err := txt.GetParsedTextFromUrl(tmpPath, ext, lang)
+	if err != nil {
+		return ""
+	}
+
+	return fmt.Sprintf("[Attachment \"%s\"](%s):\n\n%s\n\n", displayName, httpUrl, parsed)
 }
 
 func AddMessage(message *Message) (bool, error) {
