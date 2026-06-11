@@ -49,6 +49,7 @@ type Message struct {
 	ReplyTo           string               `xorm:"varchar(100) index" json:"replyTo"`
 	Author            string               `xorm:"varchar(100)" json:"author"`
 	Text              string               `xorm:"mediumtext" json:"text"`
+	TextNoCdn         string               `xorm:"-" json:"textNoCdn"` // inline-content version (not stored in DB)
 	ReasonText        string               `xorm:"mediumtext" json:"reasonText"`
 	ErrorText         string               `xorm:"mediumtext" json:"errorText"`
 	FileName          string               `xorm:"varchar(100)" json:"fileName"`
@@ -221,6 +222,9 @@ func dataURLMimeType(dataURL string) string {
 
 func RefineMessageFiles(message *Message, origin string, lang string) error {
 	text := message.Text
+	// Always preserve the pre-CDN text so callers can access inline content before it is
+	// replaced with CDN URLs. TextNoCdn is not stored in DB (xorm:"-").
+	message.TextNoCdn = text
 	// re := regexp.MustCompile(`data:image\/([a-zA-Z]*);base64,([^"]*)`)
 	re := regexp.MustCompile(`data:([a-zA-Z0-9][a-zA-Z0-9!#$&^_.+\-]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+\-]*);base64,[a-zA-Z0-9+/=_-]+`)
 	matches := re.FindAllString(text, -1)

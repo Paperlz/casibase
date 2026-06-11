@@ -284,6 +284,17 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 		return
 	}
 
+	// For providers that cannot resolve CDN URLs, prefer the inline-content version of
+	// the question (TextNoCdn), which was preserved before CDN upload. When TextNoCdn is
+	// empty (message loaded from DB after CDN processing), the provider falls back to
+	// downloading images from CDN at query time.
+	if questionMessage != nil && !model.ProviderSupportsCdnUrl(modelProvider.Type) && questionMessage.TextNoCdn != "" {
+		noCdnQuestion, parseErr := refineQuestionTextViaParsingUrlContent(questionMessage.TextNoCdn, lang)
+		if parseErr == nil {
+			question = noCdnQuestion
+		}
+	}
+
 	if video.IsVideoModel(modelProvider.Type, modelProvider.SubType) {
 		videoProvider, err := modelProvider.GetVideoProvider(lang)
 		if err != nil {
@@ -498,6 +509,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 	}
 
 	message.Text = textAnswer
+	message.TextNoCdn = textAnswer // preserve pre-CDN version before tryStoreRemoteImage replaces it
 	if message.Text != "" {
 		message.ErrorText = ""
 		message.IsAlerted = false
@@ -715,6 +727,7 @@ func (c *ApiController) GetAnswer() {
 		return
 	}
 
+	answerMessage.TextNoCdn = answerMessage.Text // preserve pre-CDN version before tryStoreRemoteImage replaces it
 	tryStoreRemoteImage(answerMessage, c.Ctx.Request.Host, c.GetAcceptLanguage())
 	answer = answerMessage.Text
 

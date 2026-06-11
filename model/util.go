@@ -28,6 +28,7 @@ import (
 
 type RawMessage struct {
 	Text             string
+	TextNoCdn        string // inline-content version of Text (CDN URLs replaced with base64); not persisted
 	Author           string
 	TextTokenCount   int
 	ReasoningContent string

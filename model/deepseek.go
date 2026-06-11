@@ -75,6 +75,12 @@ func (p *DeepSeekProvider) calculatePrice(modelResult *ModelResult, lang string)
 func (p *DeepSeekProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, toolSession *ToolSession, lang string) (*ModelResult, error) {
 	const BaseUrl = "https://api.deepseek.com/v1"
 
+	// DeepSeek cannot fetch external CDN URLs.
+	// The question already uses the inline-content (TextNoCdn) version when available —
+	// the controller selects it before calling QueryText. For history messages loaded from
+	// DB (TextNoCdn not persisted), download CDN images on demand.
+	history = ApplyNoCdnToMessages(history)
+
 	var localType string
 	switch p.subType {
 	case "deepseek-v4-pro", "deepseek-reasoner":
