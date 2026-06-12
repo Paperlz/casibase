@@ -17,12 +17,14 @@ package object
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/model"
+	"github.com/the-open-agent/openagent/txt"
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
 )
@@ -50,6 +52,7 @@ type Message struct {
 	Author            string               `xorm:"varchar(100)" json:"author"`
 	Text              string               `xorm:"mediumtext" json:"text"`
 	TextNoCdn         string               `xorm:"-" json:"textNoCdn"` // inline-content version (not stored in DB)
+	FileText          string               `xorm:"mediumtext" json:"-"`
 	ReasonText        string               `xorm:"mediumtext" json:"reasonText"`
 	ErrorText         string               `xorm:"mediumtext" json:"errorText"`
 	FileName          string               `xorm:"varchar(100)" json:"fileName"`
@@ -187,8 +190,9 @@ func UpdateMessage(id string, message *Message, isHitOnly bool) (bool, error) {
 		return false, nil
 	}
 
+	message.FileText = originMessage.FileText
 	if originMessage.TextTokenCount == 0 || originMessage.Text != message.Text {
-		size, err := getMessageTextTokenCount(message.ModelProvider, message.Text)
+		size, err := getMessageTextTokenCount(message.ModelProvider, message.GetModelText())
 		if err != nil {
 			return false, err
 		}
@@ -198,7 +202,7 @@ func UpdateMessage(id string, message *Message, isHitOnly bool) (bool, error) {
 	if isHitOnly {
 		_, err = adapter.engine.ID(core.PK{owner, name}).Cols("suggestions").Update(message)
 	} else {
-		_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Update(message)
+		_, err = adapter.engine.ID(core.PK{owner, name}).AllCols().Omit("file_text").Update(message)
 	}
 	if err != nil {
 		return false, err
@@ -273,6 +277,20 @@ func RefineMessageFiles(message *Message, origin string, lang string) error {
 				return err
 			}
 
+			mimeType := dataURLMimeType(match)
+			ext := strings.ToLower(filepath.Ext(message.FileName))
+			if !strings.HasPrefix(mimeType, "image/") {
+				for _, supportedExt := range txt.GetSupportedFileTypes() {
+					if ext == supportedExt {
+						message.FileText, err = txt.GetParsedTextFromBytes(content, ext, lang)
+						if err != nil {
+							return err
+						}
+						break
+					}
+				}
+			}
+
 			filePath := fmt.Sprintf("%s/%s/%s/%s", message.Organization, message.User, message.Chat, message.FileName)
 
 			var fileUrl string
@@ -301,7 +319,7 @@ func RefineMessageFiles(message *Message, origin string, lang string) error {
 }
 
 func AddMessage(message *Message) (bool, error) {
-	size, err := getMessageTextTokenCount(message.ModelProvider, message.Text)
+	size, err := getMessageTextTokenCount(message.ModelProvider, message.GetModelText())
 	if err != nil {
 		return false, err
 	}
@@ -376,6 +394,13 @@ func (message *Message) GetId() string {
 	return fmt.Sprintf("%s/%s", message.Owner, message.Name)
 }
 
+func (message *Message) GetModelText() string {
+	if message.FileText == "" {
+		return message.Text
+	}
+	return fmt.Sprintf("URL: %s\n\nContent:\n%s", message.Text, message.FileText)
+}
+
 func GetRecentRawMessages(chat string, createdTime string, memoryLimit int) ([]*model.RawMessage, error) {
 	res := []*model.RawMessage{}
 	if memoryLimit == 0 {
@@ -391,15 +416,15 @@ func GetRecentRawMessages(chat string, createdTime string, memoryLimit int) ([]*
 	for _, message := range messages {
 		rawTextTokenCount := message.TextTokenCount
 		if rawTextTokenCount == 0 {
-			rawTextTokenCount, err = getMessageTextTokenCount(message.ModelProvider, message.Text)
+			rawTextTokenCount, err = getMessageTextTokenCount(message.ModelProvider, message.GetModelText())
 			if err != nil {
 				return nil, err
 			}
 		}
 		rawMessage := &model.RawMessage{
-			Text:           message.Text,
+			Text:           message.GetModelText(),
 			Author:         message.Author,
-			TextTokenCount: message.TextTokenCount,
+			TextTokenCount: rawTextTokenCount,
 		}
 		res = append(res, rawMessage)
 	}

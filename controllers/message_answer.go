@@ -246,13 +246,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 			return
 		}
 
-		question = questionMessage.Text
-
-		question, err = refineQuestionTextViaParsingUrlContent(question, lang)
-		if err != nil {
-			responseErrorStream(message, err.Error())
-			return
-		}
+		question = questionMessage.GetModelText()
 	}
 
 	if question == "" {
@@ -288,7 +282,7 @@ func generateMessageAnswer(id string, responseWriter http.ResponseWriter, host s
 	// the question (TextNoCdn), which was preserved before CDN upload. When TextNoCdn is
 	// empty (message loaded from DB after CDN processing), the provider falls back to
 	// downloading images from CDN at query time.
-	if questionMessage != nil && !model.ProviderSupportsCdnUrl(modelProvider.Type) && questionMessage.TextNoCdn != "" {
+	if questionMessage != nil && questionMessage.FileText == "" && !model.ProviderSupportsCdnUrl(modelProvider.Type) && questionMessage.TextNoCdn != "" {
 		noCdnQuestion, parseErr := refineQuestionTextViaParsingUrlContent(questionMessage.TextNoCdn, lang)
 		if parseErr == nil {
 			question = noCdnQuestion

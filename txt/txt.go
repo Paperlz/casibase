@@ -27,6 +27,25 @@ func GetSupportedFileTypes() []string {
 	return []string{".txt", ".md", ".yaml", ".csv", ".pdf", ".docx", ".xlsx", ".pptx"}
 }
 
+func GetParsedTextFromBytes(data []byte, ext string, lang string) (string, error) {
+	file, err := os.CreateTemp("", "openagent-*"+ext)
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	defer os.Remove(path)
+
+	if _, err = file.Write(data); err != nil {
+		file.Close()
+		return "", err
+	}
+	if err = file.Close(); err != nil {
+		return "", err
+	}
+
+	return GetParsedTextFromUrl(path, ext, lang)
+}
+
 func GetParsedTextFromUrl(url string, ext string, lang string) (string, error) {
 	var path string
 	var err error
