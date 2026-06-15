@@ -450,11 +450,6 @@ export function getToolFunctions(tool) {
         description: "Search for images and return thumbnails for visual analysis",
         testContent: JSON.stringify({tool: "image_search", arguments: {query: "OpenAgent", count: 3, language: "en", country: "us"}}, null, 2),
       },
-      {
-        name: "image_download",
-        description: "Download a selected image URL to a local path",
-        testContent: JSON.stringify({tool: "image_download", arguments: {url: "https://example.com/image.png", path: "/tmp/image.png"}}, null, 2),
-      },
     ];
   }
   if (type === "shell") {
