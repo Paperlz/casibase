@@ -29,6 +29,7 @@ import (
 	"github.com/sashabaranov/go-openai"
 	"github.com/the-open-agent/openagent/i18n"
 	"github.com/the-open-agent/openagent/mcp"
+	"github.com/the-open-agent/openagent/tool"
 )
 
 type ToolMessages struct {
@@ -189,10 +190,6 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 		fmt.Printf("\n--- Agent Round %d | LLM Decision: [%d tool call(s)] ---\n", round, len(toolCalls))
 		for i, tc := range toolCalls {
 			fmt.Printf("  Tool %d: [%s] args: %s\n", i+1, tc.Function.Name, tc.Function.Arguments)
-			_, toolName := mcp.GetServerNameAndToolNameFromId(tc.Function.Name)
-			if toolName == "image_search" && !toolSession.IsVision {
-				return nil, fmt.Errorf("当前模型不支持看图")
-			}
 		}
 
 		roundHasToolError := false
@@ -209,7 +206,7 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 
 			var toolFailed bool
 			var images []ImageAttachment
-			messages, images, toolFailed, err = callMcpTool(toolCall, serverName, toolName, toolSession.McpToolSet, messages, writer, lang)
+			messages, images, toolFailed, err = callMcpTool(toolCall, serverName, toolName, toolSession.IsVision, toolSession.McpToolSet, messages, writer, lang)
 			if err != nil {
 				return nil, err
 			}
@@ -289,9 +286,9 @@ func startHeartbeat(writer io.Writer, mu *sync.Mutex) chan<- struct{} {
 	return stop
 }
 
-func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolSet *mcp.ToolSet, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, []ImageAttachment, bool, error) {
+func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, isVision bool, mcpToolSet *mcp.ToolSet, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, []ImageAttachment, bool, error) {
 	var arguments map[string]interface{}
-	ctx := context.Background()
+	ctx := tool.WithModelVision(context.Background(), isVision)
 
 	if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &arguments); err != nil {
 		return nil, nil, false, fmt.Errorf(i18n.Translate(lang, "model:failed to parse tool arguments: %v"), err)

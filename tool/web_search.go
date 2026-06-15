@@ -187,6 +187,12 @@ type imageDownloadBuiltin struct {
 	httpClient *http.Client
 }
 
+type modelVisionContextKey struct{}
+
+func WithModelVision(ctx context.Context, enabled bool) context.Context {
+	return context.WithValue(ctx, modelVisionContextKey{}, enabled)
+}
+
 type imageSearchResult struct {
 	ID           string `json:"id"`
 	Title        string `json:"title,omitempty"`
@@ -267,6 +273,10 @@ func (t *imageSearchBuiltin) GetInputSchema() interface{} {
 }
 
 func (t *imageSearchBuiltin) Execute(ctx context.Context, arguments map[string]interface{}) (*protocol.CallToolResult, error) {
+	if isVision, ok := ctx.Value(modelVisionContextKey{}).(bool); ok && !isVision {
+		return webSearchToolError("当前模型不支持看图"), nil
+	}
+
 	params, err := parseWebSearchArguments(arguments)
 	if err != nil {
 		return webSearchToolError(err.Error()), nil
