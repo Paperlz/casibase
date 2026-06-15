@@ -241,6 +241,12 @@ type baiduWebSearchResponse struct {
 		Content   string `json:"content"`
 		Website   string `json:"website"`
 		WebAnchor string `json:"web_anchor"`
+		Type      string `json:"type"`
+		Image     *struct {
+			URL    string `json:"url"`
+			Width  string `json:"width"`
+			Height string `json:"height"`
+		} `json:"image"`
 	} `json:"references"`
 }
 
@@ -331,6 +337,9 @@ func (t *imageSearchBuiltin) runImageSearch(ctx context.Context, params webSearc
 	case webSearchEngineDuckDuckGo:
 		results, err := runDuckDuckGoImageSearch(ctx, params, t.httpClient)
 		return results, "duckduckgo", err
+	case webSearchEngineBaidu:
+		results, err := runBaiduImageSearch(ctx, params, t.apiKey, t.endpoint, t.httpClient)
+		return results, "baidu", err
 	default:
 		return nil, "", fmt.Errorf("image search is not supported by %s", t.engine)
 	}
@@ -798,11 +807,35 @@ func runDuckDuckGoImageSearch(ctx context.Context, params webSearchParams, httpC
 }
 
 func runBaiduSearch(ctx context.Context, params webSearchParams, apiKey string, endpoint string, httpClient *http.Client) ([]webSearchResult, error) {
+	response, err := fetchBaiduSearch(ctx, params, apiKey, endpoint, "web", httpClient)
+	if err != nil {
+		return nil, err
+	}
+	results := parseBaiduSearchResponse(response)
+	if len(results) == 0 {
+		return nil, fmt.Errorf("Baidu returned no results")
+	}
+	return limitWebSearchResults(results, params.Count), nil
+}
+
+func runBaiduImageSearch(ctx context.Context, params webSearchParams, apiKey string, endpoint string, httpClient *http.Client) ([]imageSearchResult, error) {
+	response, err := fetchBaiduSearch(ctx, params, apiKey, endpoint, "image", httpClient)
+	if err != nil {
+		return nil, err
+	}
+	results := parseBaiduImageSearchResponse(response)
+	if len(results) == 0 {
+		return nil, fmt.Errorf("Baidu returned no image results")
+	}
+	return limitImageSearchResults(results, params.Count), nil
+}
+
+func fetchBaiduSearch(ctx context.Context, params webSearchParams, apiKey string, endpoint string, resourceType string, httpClient *http.Client) (baiduWebSearchResponse, error) {
 	if strings.TrimSpace(apiKey) == "" {
-		return nil, fmt.Errorf("Baidu search requires an API key in clientSecret")
+		return baiduWebSearchResponse{}, fmt.Errorf("Baidu search requires an API key in clientSecret")
 	}
 
-	requestBody := baiduWebSearchRequest{
+	requestBytes, err := json.Marshal(baiduWebSearchRequest{
 		Messages: []baiduWebSearchMessage{
 			{
 				Content: params.Query,
@@ -812,41 +845,42 @@ func runBaiduSearch(ctx context.Context, params webSearchParams, apiKey string, 
 		SearchSource: "baidu_search_v2",
 		ResourceTypeFilter: []baiduWebSearchResourceType{
 			{
-				Type: "web",
+				Type: resourceType,
 				TopK: params.Count,
 			},
 		},
-	}
-	requestBytes, err := json.Marshal(requestBody)
+	})
 	if err != nil {
-		return nil, err
+		return baiduWebSearchResponse{}, err
 	}
 
-	headers := map[string]string{
-		"Content-Type":               "application/json",
-		"X-Appbuilder-Authorization": fmt.Sprintf("Bearer %s", apiKey),
-	}
-	body, err := fetchWebSearchAPI(ctx, http.MethodPost, resolveWebSearchEndpoint(endpoint, baiduWebSearchEndpoint), nil, bytes.NewReader(requestBytes), headers, httpClient)
+	body, err := fetchWebSearchAPI(
+		ctx,
+		http.MethodPost,
+		resolveWebSearchEndpoint(endpoint, baiduWebSearchEndpoint),
+		nil,
+		bytes.NewReader(requestBytes),
+		map[string]string{
+			"Content-Type":               "application/json",
+			"X-Appbuilder-Authorization": fmt.Sprintf("Bearer %s", apiKey),
+		},
+		httpClient,
+	)
 	if err != nil {
-		return nil, err
+		return baiduWebSearchResponse{}, err
 	}
 
 	var response baiduWebSearchResponse
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, err
+		return baiduWebSearchResponse{}, err
 	}
 	if response.Code != "" && len(response.References) == 0 {
 		if response.Message != "" {
-			return nil, fmt.Errorf("Baidu returned an error: %s", response.Message)
+			return baiduWebSearchResponse{}, fmt.Errorf("Baidu returned an error: %s", response.Message)
 		}
-		return nil, fmt.Errorf("Baidu returned an error: %s", response.Code)
+		return baiduWebSearchResponse{}, fmt.Errorf("Baidu returned an error: %s", response.Code)
 	}
-
-	results := parseBaiduSearchResponse(response)
-	if len(results) == 0 {
-		return nil, fmt.Errorf("Baidu returned no results")
-	}
-	return limitWebSearchResults(results, params.Count), nil
+	return response, nil
 }
 
 func fetchWebSearchAPI(ctx context.Context, method string, endpoint string, query url.Values, body io.Reader, headers map[string]string, httpClient *http.Client) ([]byte, error) {
@@ -1102,6 +1136,29 @@ func parseBaiduSearchResponse(response baiduWebSearchResponse) []webSearchResult
 			URL:      resultURL,
 			Snippet:  cleanWebSearchText(reference.Content),
 			SiteName: siteName,
+		})
+	}
+	return results
+}
+
+func parseBaiduImageSearchResponse(response baiduWebSearchResponse) []imageSearchResult {
+	results := make([]imageSearchResult, 0, len(response.References))
+	for _, reference := range response.References {
+		if reference.Image == nil || strings.TrimSpace(reference.Image.URL) == "" {
+			continue
+		}
+		title := cleanWebSearchText(reference.Title)
+		if title == "" {
+			title = cleanWebSearchText(reference.WebAnchor)
+		}
+		width, _ := strconv.Atoi(reference.Image.Width)
+		height, _ := strconv.Atoi(reference.Image.Height)
+		results = append(results, imageSearchResult{
+			Title:     title,
+			ImageURL:  strings.TrimSpace(reference.Image.URL),
+			SourceURL: strings.TrimSpace(reference.URL),
+			Width:     width,
+			Height:    height,
 		})
 	}
 	return results
