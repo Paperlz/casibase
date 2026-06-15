@@ -439,11 +439,23 @@ export function getToolFunctions(tool) {
     }];
   }
   if (type === "web_search") {
-    return [{
-      name: "web_search",
-      description: "Search the web using the configured search engine",
-      testContent: JSON.stringify({tool: "web_search", arguments: {query: "OpenAgent web search", count: 3, language: "en", country: "us"}}, null, 2),
-    }];
+    return [
+      {
+        name: "web_search",
+        description: "Search the web using the configured search engine",
+        testContent: JSON.stringify({tool: "web_search", arguments: {query: "OpenAgent web search", count: 3, language: "en", country: "us"}}, null, 2),
+      },
+      {
+        name: "image_search",
+        description: "Search for images and return thumbnails for visual analysis",
+        testContent: JSON.stringify({tool: "image_search", arguments: {query: "OpenAgent", count: 3, language: "en", country: "us"}}, null, 2),
+      },
+      {
+        name: "image_download",
+        description: "Download a selected image URL to a local path",
+        testContent: JSON.stringify({tool: "image_download", arguments: {url: "https://example.com/image.png", path: "/tmp/image.png"}}, null, 2),
+      },
+    ];
   }
   if (type === "shell") {
     return [{

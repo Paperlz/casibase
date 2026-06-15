@@ -40,6 +40,7 @@ type ToolMessages struct {
 type ToolSession struct {
 	McpToolSet   *mcp.ToolSet
 	ToolMessages *ToolMessages
+	IsVision     bool
 }
 
 type ToolCallResponse struct {
@@ -188,9 +189,14 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 		fmt.Printf("\n--- Agent Round %d | LLM Decision: [%d tool call(s)] ---\n", round, len(toolCalls))
 		for i, tc := range toolCalls {
 			fmt.Printf("  Tool %d: [%s] args: %s\n", i+1, tc.Function.Name, tc.Function.Arguments)
+			_, toolName := mcp.GetServerNameAndToolNameFromId(tc.Function.Name)
+			if toolName == "image_search" && !toolSession.IsVision {
+				return nil, fmt.Errorf("当前模型不支持看图")
+			}
 		}
 
 		roundHasToolError := false
+		var roundImages []ImageAttachment
 		for _, toolCall := range toolCalls {
 			serverName, toolName := mcp.GetServerNameAndToolNameFromId(toolCall.Function.Name)
 
@@ -202,13 +208,22 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 			})
 
 			var toolFailed bool
-			messages, toolFailed, err = callMcpTool(toolCall, serverName, toolName, toolSession.McpToolSet, messages, writer, lang)
+			var images []ImageAttachment
+			messages, images, toolFailed, err = callMcpTool(toolCall, serverName, toolName, toolSession.McpToolSet, messages, writer, lang)
 			if err != nil {
 				return nil, err
 			}
+			roundImages = append(roundImages, images...)
 			if toolFailed {
 				roundHasToolError = true
 			}
+		}
+		if len(roundImages) > 0 {
+			messages = append(messages, &RawMessage{
+				Text:   "Images returned by image_search, in the same order as the result metadata.",
+				Author: "User",
+				Images: roundImages,
+			})
 		}
 
 		toolSession.ToolMessages.Messages = messages
@@ -274,12 +289,12 @@ func startHeartbeat(writer io.Writer, mu *sync.Mutex) chan<- struct{} {
 	return stop
 }
 
-func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolSet *mcp.ToolSet, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, bool, error) {
+func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolSet *mcp.ToolSet, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, []ImageAttachment, bool, error) {
 	var arguments map[string]interface{}
 	ctx := context.Background()
 
 	if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &arguments); err != nil {
-		return nil, false, fmt.Errorf(i18n.Translate(lang, "model:failed to parse tool arguments: %v"), err)
+		return nil, nil, false, fmt.Errorf(i18n.Translate(lang, "model:failed to parse tool arguments: %v"), err)
 	}
 
 	// Send tool-start event immediately so the frontend can show the tool call before execution
@@ -303,14 +318,14 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 	if serverName == "" {
 		// builtin tools
 		if mcpToolSet.BuiltinTools == nil {
-			return messages, false, nil
+			return messages, nil, false, nil
 		}
 		result, err = mcpToolSet.BuiltinTools.ExecuteTool(ctx, toolName, arguments)
 	} else {
 		// MCP server tools
 		conn, ok := mcpToolSet.Connections[serverName]
 		if !ok {
-			return messages, false, nil
+			return messages, nil, false, nil
 		}
 		req := &protocol.CallToolRequest{
 			Name:      toolName,
@@ -322,13 +337,27 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 	response := &ToolCallResponse{
 		ToolName: toolCall.Function.Name,
 	}
+	var images []ImageAttachment
+	var responseContent []protocol.Content
+	if result != nil {
+		for _, content := range result.Content {
+			if imageContent, ok := content.(*protocol.ImageContent); ok {
+				images = append(images, ImageAttachment{
+					Data:     imageContent.Data,
+					MimeType: imageContent.MimeType,
+				})
+				continue
+			}
+			responseContent = append(responseContent, content)
+		}
+	}
 
 	if err != nil {
 		response.Success = false
 		response.Error = err.Error()
 	} else if result.IsError {
 		response.Success = false
-		contentBytes, err := json.Marshal(result.Content)
+		contentBytes, err := json.Marshal(responseContent)
 		if err != nil {
 			response.Error = fmt.Sprintf(i18n.Translate(lang, "model:failed to marshal error content: %v"), err)
 		} else {
@@ -336,7 +365,7 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 		}
 	} else {
 		response.Success = true
-		contentBytes, err := json.Marshal(result.Content)
+		contentBytes, err := json.Marshal(responseContent)
 		if err != nil {
 			response.Data = fmt.Sprintf(i18n.Translate(lang, "model:failed to marshal content: %v"), err)
 		} else {
@@ -346,7 +375,7 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 
 	responseJson, err := json.Marshal(response)
 	if err != nil {
-		return nil, false, fmt.Errorf(i18n.Translate(lang, "model:failed to marshal tool response: %v"), err)
+		return nil, nil, false, fmt.Errorf(i18n.Translate(lang, "model:failed to marshal tool response: %v"), err)
 	}
 
 	var contentStr string
@@ -374,7 +403,7 @@ func callMcpTool(toolCall openai.ToolCall, serverName, toolName string, mcpToolS
 	}
 
 	messages = append(messages, createToolMessage(toolCall, string(responseJson)))
-	return messages, !response.Success, nil
+	return messages, images, !response.Success, nil
 }
 
 func GetToolCallsFromWriter(toolMessage string) []ToolCall {
