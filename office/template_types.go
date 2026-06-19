@@ -116,13 +116,16 @@ type SmartArtNodeInfo struct {
 }
 
 type SmartArtInfo struct {
-	SmartArtID string             `json:"smartart_id"`
-	ShapeID    string             `json:"shape_id"`
-	ShapeName  string             `json:"shape_name"`
-	Geometry   Geometry           `json:"geometry"`
-	Editable   bool               `json:"editable"`
-	Reason     string             `json:"reason,omitempty"`
-	Nodes      []SmartArtNodeInfo `json:"nodes"`
+	SmartArtID   string             `json:"smartart_id"`
+	ShapeID      string             `json:"shape_id"`
+	ShapeName    string             `json:"shape_name"`
+	Geometry     Geometry           `json:"geometry"`
+	Editable     bool               `json:"editable"`
+	Reason       string             `json:"reason,omitempty"`
+	Resizable    bool               `json:"resizable"`
+	ResizeMode   string             `json:"resize_mode,omitempty"`
+	ResizeReason string             `json:"resize_reason,omitempty"`
+	Nodes        []SmartArtNodeInfo `json:"nodes"`
 }
 
 type SlideObject struct {
@@ -212,6 +215,7 @@ type SmartArtEdit struct {
 	SmartArtID string             `json:"smartart_id,omitempty"`
 	ShapeID    string             `json:"shape_id,omitempty"`
 	ShapeName  string             `json:"shape_name,omitempty"`
+	Resize     bool               `json:"resize,omitempty"`
 	Nodes      []SmartArtNodeEdit `json:"nodes"`
 	Optional   bool               `json:"optional,omitempty"`
 }

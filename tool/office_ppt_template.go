@@ -112,7 +112,7 @@ func (t *pptxTemplateFillBuiltin) GetDescription() string {
 - path: exact output .pptx path; relative paths resolve to the user's Documents folder.
 - plan: template_fill_pptx_plan.v1 object. Slides may be selected, repeated, and reordered. Each slide supports replacements, table_edits, chart_edits, image_edits, smartart_edits, and notes.
 - image_edits: each edit needs an image_id and image_path (local PNG/JPEG path or HTTP(S) URL). Only PNG and JPEG are supported. Replacing an image preserves the template picture frame's position, size, rotation, cropping, and styles without recomputing the aspect ratio.
-- smartart_edits: each edit targets an existing SmartArt from analysis by smartart_id, shape_id, or shape_name and replaces existing node text by node_id or array order. The first version keeps node count, layout, colors, and style unchanged. Empty text intentionally clears a node.
+- smartart_edits: each edit targets an existing SmartArt from analysis by smartart_id, shape_id, or shape_name and replaces node text by node_id or array order. If analysis returns resizable=true, set resize=true and provide the complete desired node list by array order to append/delete tail nodes; this removes the cached SmartArt drawing so PowerPoint recalculates it when opened. Empty text intentionally clears a node.
 - Do not insert manual line breaks into titles unless they are intentional; single-line template titles are auto-fitted by default.
 - Keep replacement text concise and respect capacity warnings. New text/image or text/text collisions are validation errors: shorten the content or choose another template slide.
 - transition defaults to "keep", preserving source transitions and object animations.
@@ -226,6 +226,11 @@ func (t *pptxTemplateFillBuiltin) GetInputSchema() interface{} {
 											"optional": map[string]interface{}{
 												"type":        "boolean",
 												"description": "Skip this SmartArt edit if the target is absent. Defaults to false.",
+												"default":     false,
+											},
+											"resize": map[string]interface{}{
+												"type":        "boolean",
+												"description": "When the analyzed SmartArt has resizable=true, use the nodes array as the complete desired node list and append/delete only tail nodes. Defaults to false.",
 												"default":     false,
 											},
 											"nodes": map[string]interface{}{

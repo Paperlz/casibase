@@ -9,6 +9,7 @@
 package office
 
 import (
+	"crypto/rand"
 	"fmt"
 	"sort"
 	"strconv"
@@ -26,6 +27,32 @@ type smartArtPresCandidate struct {
 	ID    string
 	Index int
 	Score int
+}
+
+type smartArtResizeNode struct {
+	ContentID         string
+	ParTransID        string
+	SibTransID        string
+	CxnID             string
+	PresNodeID        string
+	PresSibTransID    string
+	ContentPt         *xmlNode
+	ParTransPt        *xmlNode
+	SibTransPt        *xmlNode
+	PresNodePt        *xmlNode
+	PresSibTransPt    *xmlNode
+	NormalCxn         *xmlNode
+	PresOfCxn         *xmlNode
+	NodePresParOf     *xmlNode
+	SibTransPresParOf *xmlNode
+}
+
+type smartArtResizeModel struct {
+	PtList        *xmlNode
+	CxnList       *xmlNode
+	DocID         string
+	DiagramPresID string
+	Nodes         []smartArtResizeNode
 }
 
 func analyzeSmartArts(pkg *Package, slide *xmlNode, ref slideRef, objectByID map[string]*SlideObject) ([]SmartArtInfo, error) {
@@ -97,6 +124,12 @@ func analyzeSmartArts(pkg *Package, slide *xmlNode, ref slideRef, objectByID map
 				modelID:        node.ModelID,
 				presIDs:        node.PresIDs,
 			})
+		}
+		if model, reason := smartArtResizeModelFromData(dataRoot); model != nil {
+			info.Resizable = true
+			info.ResizeMode = "top_level_tail"
+		} else {
+			info.ResizeReason = reason
 		}
 		result = append(result, info)
 	}
@@ -302,6 +335,44 @@ func checkSmartArts(report *CheckReport, planIndex int, slide *SlideLibraryItem,
 			})
 			continue
 		}
+		if edit.Resize {
+			if !smartArt.Resizable {
+				addCheck(report, "ERROR", CheckResult{
+					"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
+					"message": "SmartArt node count is not editable: " + smartArt.ResizeReason,
+				})
+				continue
+			}
+			if len(edit.Nodes) == 0 || len(edit.Nodes) > 20 {
+				addCheck(report, "ERROR", CheckResult{
+					"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
+					"message": "SmartArt resize needs 1 to 20 nodes",
+				})
+				continue
+			}
+			countChanges := len(edit.Nodes) != len(smartArt.Nodes)
+			for index, node := range edit.Nodes {
+				if countChanges && node.NodeID != "" {
+					addCheck(report, "ERROR", CheckResult{
+						"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
+						"node_id": node.NodeID, "message": "SmartArt resize with node count changes must use array order",
+					})
+					continue
+				}
+				if node.NodeID != "" && smartArtNodeByEdit(smartArt, node, index) == nil {
+					addCheck(report, "ERROR", CheckResult{
+						"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
+						"node_id": node.NodeID, "message": "SmartArt node target not found",
+					})
+					continue
+				}
+				addCheck(report, "OK", CheckResult{
+					"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
+					"message": "SmartArt resize node is valid",
+				})
+			}
+			continue
+		}
 		for index, node := range edit.Nodes {
 			target := smartArtNodeByEdit(smartArt, node, index)
 			if target == nil {
@@ -354,7 +425,7 @@ func smartArtNodeByEdit(info *SmartArtInfo, edit SmartArtNodeEdit, index int) *S
 	return nil
 }
 
-func applySmartArtEdits(pkg *Package, slide *xmlNode, rels *Relationships, sourceSlide int, slidePart string, edits []SmartArtEdit) error {
+func applySmartArtEdits(pkg *Package, slide *xmlNode, rels *Relationships, types *ContentTypes, sourceSlide int, slidePart string, edits []SmartArtEdit) error {
 	if len(edits) == 0 {
 		return nil
 	}
@@ -384,7 +455,7 @@ func applySmartArtEdits(pkg *Package, slide *xmlNode, rels *Relationships, sourc
 			}
 			continue
 		}
-		if err := applySmartArtEdit(pkg, frame, rels, sourceSlide, slidePart, edit); err != nil {
+		if err := applySmartArtEdit(pkg, frame, rels, types, sourceSlide, slidePart, edit); err != nil {
 			return err
 		}
 	}
@@ -394,7 +465,7 @@ func applySmartArtEdits(pkg *Package, slide *xmlNode, rels *Relationships, sourc
 	return nil
 }
 
-func applySmartArtEdit(pkg *Package, frame *xmlNode, rels *Relationships, sourceSlide int, slidePart string, edit SmartArtEdit) error {
+func applySmartArtEdit(pkg *Package, frame *xmlNode, rels *Relationships, types *ContentTypes, sourceSlide int, slidePart string, edit SmartArtEdit) error {
 	shapeID, _ := shapeIdentity(frame, 0)
 	relIDs := smartArtRelIDs(frame)
 	if relIDs == nil {
@@ -407,6 +478,15 @@ func applySmartArtEdit(pkg *Package, frame *xmlNode, rels *Relationships, source
 	dataRoot, err := pkg.xmlPart(dataPart)
 	if err != nil {
 		return err
+	}
+	if edit.Resize {
+		model, reason := smartArtResizeModelFromData(dataRoot)
+		if model == nil {
+			return fmt.Errorf("SmartArt %s on slide %d cannot resize nodes: %s", shapeID, sourceSlide, reason)
+		}
+		if len(edit.Nodes) != len(model.Nodes) {
+			return applySmartArtResizeEdit(pkg, rels, types, sourceSlide, slidePart, shapeID, dataPart, dataRoot, edit)
+		}
 	}
 	drawingRoot, drawingPart, err := smartArtDrawingRoot(pkg, slidePart, rels, dataRoot)
 	if err != nil {
@@ -461,6 +541,402 @@ func applySmartArtEdit(pkg *Package, frame *xmlNode, rels *Relationships, source
 		}
 	}
 	return nil
+}
+
+func applySmartArtResizeEdit(pkg *Package, rels *Relationships, types *ContentTypes, sourceSlide int, slidePart, shapeID, dataPart string, dataRoot *xmlNode, edit SmartArtEdit) error {
+	if len(edit.Nodes) == 0 || len(edit.Nodes) > 20 {
+		return fmt.Errorf("SmartArt %s on slide %d resize needs 1 to 20 nodes", shapeID, sourceSlide)
+	}
+	for _, node := range edit.Nodes {
+		if node.NodeID != "" {
+			return fmt.Errorf("SmartArt %s on slide %d resize with node count changes must use array order", shapeID, sourceSlide)
+		}
+	}
+	model, reason := smartArtResizeModelFromData(dataRoot)
+	if model == nil {
+		return fmt.Errorf("SmartArt %s on slide %d cannot resize nodes: %s", shapeID, sourceSlide, reason)
+	}
+	for len(model.Nodes) < len(edit.Nodes) {
+		if err := appendSmartArtResizeNode(dataRoot, model); err != nil {
+			return fmt.Errorf("SmartArt %s on slide %d: %w", shapeID, sourceSlide, err)
+		}
+		model, reason = smartArtResizeModelFromData(dataRoot)
+		if model == nil {
+			return fmt.Errorf("SmartArt %s on slide %d cannot resize nodes: %s", shapeID, sourceSlide, reason)
+		}
+	}
+	for len(model.Nodes) > len(edit.Nodes) {
+		if err := deleteSmartArtResizeTailNode(dataRoot, model); err != nil {
+			return fmt.Errorf("SmartArt %s on slide %d: %w", shapeID, sourceSlide, err)
+		}
+		model, reason = smartArtResizeModelFromData(dataRoot)
+		if model == nil {
+			return fmt.Errorf("SmartArt %s on slide %d cannot resize nodes: %s", shapeID, sourceSlide, reason)
+		}
+	}
+	for index, nodeEdit := range edit.Nodes {
+		if !setSmartArtDataText(dataRoot, model.Nodes[index].ContentID, smartArtEditText(nodeEdit)) {
+			return fmt.Errorf("SmartArt %s on slide %d: node data not found: %s", shapeID, sourceSlide, model.Nodes[index].ContentID)
+		}
+	}
+	if err := removeSmartArtDrawingCache(pkg, rels, types, slidePart, dataRoot); err != nil {
+		return fmt.Errorf("SmartArt %s on slide %d: %w", shapeID, sourceSlide, err)
+	}
+	data, err := marshalXML(dataRoot)
+	if err != nil {
+		return err
+	}
+	return pkg.SetPart(dataPart, data)
+}
+
+func smartArtResizeModelFromData(dataRoot *xmlNode) (*smartArtResizeModel, string) {
+	ptList := dataRoot.child(nsDiagram, "ptLst")
+	cxnList := dataRoot.child(nsDiagram, "cxnLst")
+	if ptList == nil || cxnList == nil {
+		return nil, "diagram point list or connection list is missing"
+	}
+
+	points := map[string]*xmlNode{}
+	var docID, diagramPresID string
+	presNodes := map[string]*xmlNode{}
+	presSibTrans := map[string]*xmlNode{}
+	for _, pt := range ptList.children(nsDiagram, "pt") {
+		id := pt.attr("", "modelId")
+		if id == "" {
+			continue
+		}
+		points[id] = pt
+		if pt.attr("", "type") == "doc" {
+			docID = id
+			continue
+		}
+		if pt.attr("", "type") != "pres" {
+			continue
+		}
+		prSet := pt.child(nsDiagram, "prSet")
+		if prSet == nil {
+			continue
+		}
+		switch prSet.attr("", "presName") {
+		case "diagram":
+			if prSet.attr("", "presAssocID") == docID || docID == "" {
+				diagramPresID = id
+			}
+		case "node":
+			presNodes[prSet.attr("", "presAssocID")] = pt
+		case "sibTrans":
+			presSibTrans[prSet.attr("", "presAssocID")] = pt
+		}
+	}
+	if docID == "" || diagramPresID == "" {
+		return nil, "diagram root nodes are missing"
+	}
+
+	var normalCxns []*xmlNode
+	presOf := map[string]*xmlNode{}
+	nodePresParOf := map[string]*xmlNode{}
+	sibTransPresParOf := map[string]*xmlNode{}
+	for _, cxn := range cxnList.children(nsDiagram, "cxn") {
+		switch cxn.attr("", "type") {
+		case "":
+			if cxn.attr("", "srcId") == docID {
+				normalCxns = append(normalCxns, cxn)
+			}
+		case "presOf":
+			presOf[cxn.attr("", "srcId")] = cxn
+		case "presParOf":
+			if cxn.attr("", "srcId") != diagramPresID {
+				continue
+			}
+			destID := cxn.attr("", "destId")
+			for assocID, presPt := range presNodes {
+				if presPt.attr("", "modelId") == destID {
+					nodePresParOf[assocID] = cxn
+					break
+				}
+			}
+			for assocID, presPt := range presSibTrans {
+				if presPt.attr("", "modelId") == destID {
+					sibTransPresParOf[assocID] = cxn
+					break
+				}
+			}
+		}
+	}
+	sort.SliceStable(normalCxns, func(i, j int) bool {
+		return smartArtIntAttr(normalCxns[i], "srcOrd") < smartArtIntAttr(normalCxns[j], "srcOrd")
+	})
+	if len(normalCxns) < 2 {
+		return nil, "at least two top-level SmartArt nodes are required for tail resize"
+	}
+
+	model := &smartArtResizeModel{PtList: ptList, CxnList: cxnList, DocID: docID, DiagramPresID: diagramPresID}
+	seenContent := map[string]bool{}
+	for index, cxn := range normalCxns {
+		if smartArtIntAttr(cxn, "srcOrd") != index {
+			return nil, "top-level node order is not contiguous"
+		}
+		contentID := cxn.attr("", "destId")
+		parTransID := cxn.attr("", "parTransId")
+		sibTransID := cxn.attr("", "sibTransId")
+		presNodePt := presNodes[contentID]
+		presOfCxn := presOf[contentID]
+		if contentID == "" || parTransID == "" || sibTransID == "" || seenContent[contentID] ||
+			points[contentID] == nil || points[parTransID] == nil || points[sibTransID] == nil ||
+			presNodePt == nil || presOfCxn == nil || nodePresParOf[contentID] == nil {
+			return nil, "top-level node mapping is incomplete"
+		}
+		if points[parTransID].attr("", "type") != "parTrans" || points[sibTransID].attr("", "type") != "sibTrans" {
+			return nil, "transition node mapping is incomplete"
+		}
+		if index < len(normalCxns)-1 && (presSibTrans[sibTransID] == nil || sibTransPresParOf[sibTransID] == nil) {
+			return nil, "visible sibling transition mapping is incomplete"
+		}
+		if index == len(normalCxns)-1 && presSibTrans[sibTransID] != nil {
+			return nil, "last sibling transition is already visible"
+		}
+		seenContent[contentID] = true
+		model.Nodes = append(model.Nodes, smartArtResizeNode{
+			ContentID: contentID, ParTransID: parTransID, SibTransID: sibTransID, CxnID: cxn.attr("", "modelId"),
+			PresNodeID: presNodePt.attr("", "modelId"), ContentPt: points[contentID], ParTransPt: points[parTransID],
+			SibTransPt: points[sibTransID], PresNodePt: presNodePt, NormalCxn: cxn, PresOfCxn: presOfCxn,
+			NodePresParOf: nodePresParOf[contentID], PresSibTransID: "",
+			SibTransPresParOf: sibTransPresParOf[sibTransID],
+		})
+		if presPt := presSibTrans[sibTransID]; presPt != nil {
+			model.Nodes[len(model.Nodes)-1].PresSibTransID = presPt.attr("", "modelId")
+			model.Nodes[len(model.Nodes)-1].PresSibTransPt = presPt
+			model.Nodes[len(model.Nodes)-1].SibTransPresParOf = sibTransPresParOf[sibTransID]
+		}
+	}
+	return model, ""
+}
+
+func appendSmartArtResizeNode(dataRoot *xmlNode, model *smartArtResizeModel) error {
+	if len(model.Nodes) < 2 {
+		return fmt.Errorf("at least two existing nodes are required before append")
+	}
+	last := model.Nodes[len(model.Nodes)-1]
+	prevVisible := model.Nodes[len(model.Nodes)-2]
+	if prevVisible.PresSibTransPt == nil {
+		return fmt.Errorf("visible sibling transition template is missing")
+	}
+	ids := smartArtModelIDs(dataRoot)
+	newContentID := smartArtNewModelID(ids)
+	newParID := smartArtNewModelID(ids)
+	newSibID := smartArtNewModelID(ids)
+	newCxnID := smartArtNewModelID(ids)
+	newPresNodeID := smartArtNewModelID(ids)
+	newPresOfID := smartArtNewModelID(ids)
+	newPresParNodeID := smartArtNewModelID(ids)
+	newPresSibID := smartArtNewModelID(ids)
+	newPresParSibID := smartArtNewModelID(ids)
+
+	newContent := last.ContentPt.clone()
+	newContent.setAttr("", "modelId", newContentID)
+	newPar := last.ParTransPt.clone()
+	newPar.setAttr("", "modelId", newParID)
+	newPar.setAttr("", "cxnId", newCxnID)
+	newSib := last.SibTransPt.clone()
+	newSib.setAttr("", "modelId", newSibID)
+	newSib.setAttr("", "cxnId", newCxnID)
+	smartArtInsertBeforeFirstPres(model.PtList, newContent, newPar, newSib)
+
+	newPresSib := prevVisible.PresSibTransPt.clone()
+	newPresSib.setAttr("", "modelId", newPresSibID)
+	if prSet := newPresSib.child(nsDiagram, "prSet"); prSet != nil {
+		prSet.setAttr("", "presAssocID", last.SibTransID)
+		prSet.setAttr("", "presName", "sibTrans")
+		prSet.setAttr("", "presStyleCnt", "0")
+		prSet.removeAttr("", "presStyleLbl")
+		prSet.removeAttr("", "presStyleIdx")
+	}
+	newPresNode := last.PresNodePt.clone()
+	newPresNode.setAttr("", "modelId", newPresNodeID)
+	if prSet := newPresNode.child(nsDiagram, "prSet"); prSet != nil {
+		prSet.setAttr("", "presAssocID", newContentID)
+	}
+	model.PtList.Children = append(model.PtList.Children, newPresSib, newPresNode)
+
+	newNormal := last.NormalCxn.clone()
+	newNormal.setAttr("", "modelId", newCxnID)
+	newNormal.setAttr("", "destId", newContentID)
+	newNormal.setAttr("", "srcOrd", strconv.Itoa(len(model.Nodes)))
+	newNormal.setAttr("", "parTransId", newParID)
+	newNormal.setAttr("", "sibTransId", newSibID)
+	newPresOf := last.PresOfCxn.clone()
+	newPresOf.setAttr("", "modelId", newPresOfID)
+	newPresOf.setAttr("", "srcId", newContentID)
+	newPresOf.setAttr("", "destId", newPresNodeID)
+	newSibPresParOf := last.NodePresParOf.clone()
+	newSibPresParOf.setAttr("", "modelId", newPresParSibID)
+	newSibPresParOf.setAttr("", "destId", newPresSibID)
+	newNodePresParOf := last.NodePresParOf.clone()
+	newNodePresParOf.setAttr("", "modelId", newPresParNodeID)
+	newNodePresParOf.setAttr("", "destId", newPresNodeID)
+	model.CxnList.Children = append(model.CxnList.Children, newNormal, newPresOf, newSibPresParOf, newNodePresParOf)
+	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
+		smartArtRenumberResizeModel(refreshed)
+	}
+	return nil
+}
+
+func deleteSmartArtResizeTailNode(dataRoot *xmlNode, model *smartArtResizeModel) error {
+	if len(model.Nodes) <= 1 {
+		return fmt.Errorf("SmartArt resize cannot delete the last node")
+	}
+	tail := model.Nodes[len(model.Nodes)-1]
+	prev := model.Nodes[len(model.Nodes)-2]
+	removeIDs := map[string]bool{
+		tail.ContentID: true, tail.ParTransID: true, tail.SibTransID: true, tail.PresNodeID: true,
+	}
+	if prev.PresSibTransID != "" {
+		removeIDs[prev.PresSibTransID] = true
+	}
+	model.PtList.Children = smartArtKeepChildren(model.PtList.Children, removeIDs)
+
+	removeCxnIDs := map[string]bool{
+		tail.CxnID:                             true,
+		tail.PresOfCxn.attr("", "modelId"):     true,
+		tail.NodePresParOf.attr("", "modelId"): true,
+	}
+	if prev.SibTransPresParOf != nil {
+		removeCxnIDs[prev.SibTransPresParOf.attr("", "modelId")] = true
+	}
+	model.CxnList.Children = smartArtKeepChildren(model.CxnList.Children, removeCxnIDs)
+	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
+		smartArtRenumberResizeModel(refreshed)
+	}
+	return nil
+}
+
+func removeSmartArtDrawingCache(pkg *Package, rels *Relationships, types *ContentTypes, slidePart string, dataRoot *xmlNode) error {
+	ext := dataRoot.firstDescendant(nsDiagram2008, "dataModelExt")
+	if ext == nil || ext.attr("", "relId") == "" {
+		return nil
+	}
+	relID := ext.attr("", "relId")
+	drawingPart, err := relatedPartByID(slidePart, rels, relID, RelationshipTypeDiagramDrawing)
+	if err != nil {
+		return err
+	}
+	rels.Remove(relID)
+	if err := pkg.SetRelationships(slidePart, rels); err != nil {
+		return err
+	}
+	if pkg.HasPart(drawingPart) {
+		if err := pkg.DeletePart(drawingPart); err != nil {
+			return err
+		}
+	}
+	if types != nil {
+		types.RemoveOverride(drawingPart)
+	}
+	smartArtRemoveDescendants(dataRoot, nsDiagram2008, "dataModelExt")
+	return nil
+}
+
+func smartArtRenumberResizeModel(model *smartArtResizeModel) {
+	presOrder := 0
+	for index := range model.Nodes {
+		node := &model.Nodes[index]
+		node.NormalCxn.setAttr("", "srcOrd", strconv.Itoa(index))
+		if prSet := node.PresNodePt.child(nsDiagram, "prSet"); prSet != nil {
+			prSet.setAttr("", "presStyleIdx", strconv.Itoa(index))
+			prSet.setAttr("", "presStyleCnt", strconv.Itoa(len(model.Nodes)))
+		}
+		node.NodePresParOf.setAttr("", "srcOrd", strconv.Itoa(presOrder))
+		presOrder++
+		if node.SibTransPresParOf != nil && index < len(model.Nodes)-1 {
+			node.SibTransPresParOf.setAttr("", "srcOrd", strconv.Itoa(presOrder))
+			presOrder++
+		}
+	}
+}
+
+func smartArtInsertBeforeFirstPres(ptList *xmlNode, nodes ...*xmlNode) {
+	insertAt := len(ptList.Children)
+	for index, child := range ptList.Children {
+		if child.Name.Space == nsDiagram && child.Name.Local == "pt" && child.attr("", "type") == "pres" {
+			insertAt = index
+			break
+		}
+	}
+	updated := make([]*xmlNode, 0, len(ptList.Children)+len(nodes))
+	updated = append(updated, ptList.Children[:insertAt]...)
+	updated = append(updated, nodes...)
+	updated = append(updated, ptList.Children[insertAt:]...)
+	ptList.Children = updated
+}
+
+func smartArtKeepChildren(children []*xmlNode, removeIDs map[string]bool) []*xmlNode {
+	kept := children[:0]
+	for _, child := range children {
+		if removeIDs[child.attr("", "modelId")] {
+			continue
+		}
+		kept = append(kept, child)
+	}
+	return kept
+}
+
+func smartArtRemoveDescendants(root *xmlNode, space, local string) {
+	kept := root.Children[:0]
+	for _, child := range root.Children {
+		if child.Name.Space == space && child.Name.Local == local {
+			continue
+		}
+		smartArtRemoveDescendants(child, space, local)
+		kept = append(kept, child)
+	}
+	root.Children = kept
+}
+
+func smartArtModelIDs(root *xmlNode) map[string]bool {
+	result := map[string]bool{}
+	for _, node := range root.descendants(nsDiagram, "pt") {
+		if id := node.attr("", "modelId"); id != "" {
+			result[id] = true
+		}
+	}
+	for _, node := range root.descendants(nsDiagram, "cxn") {
+		if id := node.attr("", "modelId"); id != "" {
+			result[id] = true
+		}
+	}
+	return result
+}
+
+func smartArtNewModelID(used map[string]bool) string {
+	for attempt := 0; ; attempt++ {
+		id, ok := smartArtRandomModelID()
+		if !ok {
+			id = fmt.Sprintf("{00000000-0000-4000-8000-%012X}", len(used)+attempt)
+		}
+		if !used[id] {
+			used[id] = true
+			return id
+		}
+	}
+}
+
+func smartArtRandomModelID() (string, bool) {
+	data := make([]byte, 16)
+	if _, err := rand.Read(data); err != nil {
+		return "", false
+	}
+	data[6] = (data[6] & 0x0f) | 0x40
+	data[8] = (data[8] & 0x3f) | 0x80
+	return strings.ToUpper(fmt.Sprintf("{%08x-%04x-%04x-%04x-%012x}",
+		data[0:4], data[4:6], data[6:8], data[8:10], data[10:16])), true
+}
+
+func smartArtIntAttr(node *xmlNode, name string) int {
+	value, err := strconv.Atoi(node.attr("", name))
+	if err != nil {
+		return -1
+	}
+	return value
 }
 
 func relatedPartByID(owner string, rels *Relationships, id, relType string) (string, error) {

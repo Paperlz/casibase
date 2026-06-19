@@ -81,6 +81,7 @@ func Analyze(pkg *Package, sourcePPTX string) (*Library, error) {
 				}},
 				"smartart_edits": []interface{}{map[string]interface{}{
 					"smartart_id": "s01_sa4",
+					"resize":      false,
 					"nodes": []interface{}{
 						map[string]interface{}{"node_id": "s01_sa4_n01", "text": "Replaced node text"},
 						map[string]interface{}{"node_id": "s01_sa4_n02", "paragraphs": []string{"Line 1", "Line 2"}},

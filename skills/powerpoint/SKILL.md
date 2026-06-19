@@ -19,7 +19,7 @@ Use this skill whenever a PowerPoint deck is involved. For new decks, pass a tru
 
 - Use `pptx_template_analyze` when the user provides a `.pptx` template or wants to preserve existing layouts, charts, images, tables, or SmartArt.
 - Build a `template_fill_pptx_plan.v1` plan from the returned slide IDs and object IDs, then call `pptx_template_fill`.
-- For SmartArt, use `smartarts[*].smartart_id` and `smartarts[*].nodes[*].node_id` in `smartart_edits`. This edits existing node text only; it does not create, delete, or relayout SmartArt nodes.
+- For SmartArt, use `smartarts[*].smartart_id` and `smartarts[*].nodes[*].node_id` in `smartart_edits` for text-only edits. When analysis returns `resizable: true`, set `resize: true` and provide the complete desired `nodes` array by order; only tail append/delete is supported, and PowerPoint recalculates the visual layout when the generated file is opened.
 
 ## Script Creation
 

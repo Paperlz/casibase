@@ -160,7 +160,7 @@ func applyPlanUnchecked(pkg *Package, plan *Plan, library *Library, options Appl
 		if err := cloneSlidePrivateParts(pkg, slideRels, newSlidePart, types, allocator); err != nil {
 			return err
 		}
-		if err := applySmartArtEdits(pkg, slide, slideRels, item.SourceSlide, newSlidePart, item.SmartArtEdits); err != nil {
+		if err := applySmartArtEdits(pkg, slide, slideRels, types, item.SourceSlide, newSlidePart, item.SmartArtEdits); err != nil {
 			return err
 		}
 		if err := applyImageEdits(pkg, slide, slideRels, types, allocator, item.SourceSlide, newSlidePart, item.ImageEdits); err != nil {
