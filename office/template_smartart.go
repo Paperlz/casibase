@@ -80,6 +80,15 @@ func checkSmartArts(report *CheckReport, planIndex int, slide *SlideLibraryItem,
 				}
 				continue
 			}
+			if !smartArtStructureOpSupported(smartArt.Structure.Kind, op.Op) {
+				if !op.Optional {
+					addCheck(report, "ERROR", CheckResult{
+						"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
+						"message": "Unsupported SmartArt structure operation for " + smartArt.Structure.Kind + ": " + op.Op,
+					})
+				}
+				continue
+			}
 			switch op.Op {
 			case "add_child":
 				if smartArtStructureGroupByRootNodeID(smartArt.Structure, op.ParentNodeID) == nil {
@@ -92,14 +101,6 @@ func checkSmartArts(report *CheckReport, planIndex int, slide *SlideLibraryItem,
 					continue
 				}
 			case "add_root":
-			default:
-				if !op.Optional {
-					addCheck(report, "ERROR", CheckResult{
-						"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
-						"message": "Unsupported SmartArt structure operation: " + op.Op,
-					})
-				}
-				continue
 			}
 			addCheck(report, "OK", CheckResult{
 				"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
@@ -234,8 +235,21 @@ func applySmartArtEdit(pkg *Package, frame *xmlNode, rels *Relationships, types 
 		}
 	}
 	if len(edit.StructureOps) != 0 {
-		return applySmartArtStructureOps(pkg, rels, types, sourceSlide, slidePart, shapeID, dataPart, dataRoot, edit.StructureOps)
+		if err := applySmartArtStructureOps(pkg, rels, types, sourceSlide, slidePart, shapeID, dataPart, dataRoot, edit.StructureOps); err != nil {
+			return err
+		}
+		if len(edit.Nodes) == 0 {
+			return nil
+		}
+		dataRoot, err = pkg.xmlPart(dataPart)
+		if err != nil {
+			return err
+		}
 	}
+	return applySmartArtNodeTextEdits(pkg, rels, sourceSlide, slidePart, shapeID, dataPart, dataRoot, edit.Nodes)
+}
+
+func applySmartArtNodeTextEdits(pkg *Package, rels *Relationships, sourceSlide int, slidePart, shapeID, dataPart string, dataRoot *xmlNode, nodes []SmartArtNodeEdit) error {
 	drawingRoot, drawingPart, err := smartArtDrawingRoot(pkg, slidePart, rels, dataRoot)
 	if err != nil {
 		return fmt.Errorf("SmartArt %s on slide %d: %w", shapeID, sourceSlide, err)
@@ -246,7 +260,7 @@ func applySmartArtEdit(pkg *Package, frame *xmlNode, rels *Relationships, types 
 	}
 
 	var missing []string
-	for index, nodeEdit := range edit.Nodes {
+	for index, nodeEdit := range nodes {
 		nodeIndex := index
 		if nodeEdit.NodeID != "" {
 			nodeIndex = smartArtNodeIndex(sourceSlide, shapeID, nodeEdit.NodeID, len(nodeRefs))
@@ -308,6 +322,12 @@ func applySmartArtStructureOps(pkg *Package, rels *Relationships, types *Content
 	for _, op := range ops {
 		var newContentID string
 		var err error
+		if !smartArtStructureOpSupported(model.Mode, op.Op) {
+			if op.Optional {
+				continue
+			}
+			return fmt.Errorf("SmartArt %s on slide %d: unsupported SmartArt structure operation for %s: %s", shapeID, sourceSlide, model.Mode, op.Op)
+		}
 		switch op.Op {
 		case "add_child":
 			parentContentID := contentIDByNodeID[op.ParentNodeID]
@@ -320,11 +340,6 @@ func applySmartArtStructureOps(pkg *Package, rels *Relationships, types *Content
 			newContentID, err = appendSmartArtChildToParent(dataRoot, model, parentContentID)
 		case "add_root":
 			newContentID, err = appendSmartArtRootOnly(dataRoot, model)
-		default:
-			if op.Optional {
-				continue
-			}
-			return fmt.Errorf("SmartArt %s on slide %d: unsupported SmartArt structure operation: %s", shapeID, sourceSlide, op.Op)
 		}
 		if err != nil {
 			if op.Optional {

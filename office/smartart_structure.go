@@ -71,3 +71,12 @@ func smartArtAppendBehavior(mode string) string {
 		return ""
 	}
 }
+
+func smartArtStructureOpSupported(kind, op string) bool {
+	switch op {
+	case "add_child", "add_root":
+		return kind == "list_group_tail" || kind == "list_single_root_tail"
+	default:
+		return false
+	}
+}

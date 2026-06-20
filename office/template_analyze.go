@@ -134,15 +134,15 @@ func planContractForLibrary(library *Library) interface{} {
 func planContractExampleEdits() map[string]interface{} {
 	return map[string]interface{}{
 		"replacements": []interface{}{map[string]interface{}{
-			"slot_id": "s01_sh2", "text": "替换后的文字", "preserve_line_breaks": false,
+			"slot_id": "s01_sh2", "text": "Replacement text", "preserve_line_breaks": false,
 		}},
 		"table_edits": []interface{}{map[string]interface{}{
 			"table_id": "s01_tbl3",
-			"cells":    []interface{}{map[string]interface{}{"row": 0, "col": 0, "text": "替换后的单元格"}},
+			"cells":    []interface{}{map[string]interface{}{"row": 0, "col": 0, "text": "Replacement cell text"}},
 		}},
 		"chart_edits": []interface{}{map[string]interface{}{
 			"chart_id": "s01_ch4", "categories": []string{"A", "B"},
-			"series": []interface{}{map[string]interface{}{"name": "系列1", "values": []int{1, 2}}},
+			"series": []interface{}{map[string]interface{}{"name": "Series 1", "values": []int{1, 2}}},
 		}},
 		"image_edits": []interface{}{map[string]interface{}{
 			"image_id": "s01_img5", "image_path": "https://example.com/image.png",
@@ -312,7 +312,7 @@ func readChartData(root *xmlNode, info *ChartInfo) {
 		info.Categories = chartCacheValues(seriesNodes[0].child(nsChart, "cat"), false)
 	}
 	for index, series := range seriesNodes {
-		name := fmt.Sprintf("系列%d", index+1)
+		name := fmt.Sprintf("Series %d", index+1)
 		if tx := series.child(nsChart, "tx"); tx != nil {
 			values := chartCacheValues(tx, false)
 			if len(values) != 0 {

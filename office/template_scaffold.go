@@ -51,7 +51,7 @@ func ScaffoldPlan(library *Library, selectedSlides []int, includeEmpty bool) *Pl
 		for _, chart := range slide.Charts {
 			series := chart.Series
 			if len(series) == 0 {
-				series = []ChartSeries{{Name: "系列1", Values: []interface{}{}}}
+				series = []ChartSeries{{Name: "Series 1", Values: []interface{}{}}}
 			}
 			categories := make([]string, len(chart.Categories))
 			for index, value := range chart.Categories {

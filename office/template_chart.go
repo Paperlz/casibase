@@ -624,7 +624,7 @@ func rewriteChartWorkbook(data []byte, edit ChartEdit) ([]byte, error) {
 	for index, series := range edit.Series {
 		name := series.Name
 		if name == "" {
-			name = fmt.Sprintf("系列%d", index+1)
+			name = fmt.Sprintf("Series %d", index+1)
 		}
 		header = append(header, name)
 	}
