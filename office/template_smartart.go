@@ -47,12 +47,41 @@ type smartArtResizeNode struct {
 	SibTransPresParOf *xmlNode
 }
 
+type smartArtResizeGroup struct {
+	ContentIDs        []string
+	PointIDs          []string
+	CxnIDs            []string
+	PresIDs           []string
+	TransitionPresIDs []string
+	TransitionCxnIDs  []string
+	RootCxn           *xmlNode
+	RootSibTransID    string
+	Root              smartArtResizeUnit
+	Children          []smartArtResizeUnit
+}
+
+type smartArtResizeUnit struct {
+	ContentID         string
+	PointIDs          []string
+	CxnIDs            []string
+	PresIDs           []string
+	TransitionPresIDs []string
+	TransitionCxnIDs  []string
+	NormalCxn         *xmlNode
+	SibTransID        string
+}
+
 type smartArtResizeModel struct {
 	PtList        *xmlNode
 	CxnList       *xmlNode
 	DocID         string
 	DiagramPresID string
+	Mode          string
 	Nodes         []smartArtResizeNode
+	Groups        []smartArtResizeGroup
+	FixedNodes    int
+	GroupNodes    int
+	ResizeStep    int
 }
 
 func analyzeSmartArts(pkg *Package, slide *xmlNode, ref slideRef, objectByID map[string]*SlideObject) ([]SmartArtInfo, error) {
@@ -127,13 +156,82 @@ func analyzeSmartArts(pkg *Package, slide *xmlNode, ref slideRef, objectByID map
 		}
 		if model, reason := smartArtResizeModelFromData(dataRoot); model != nil {
 			info.Resizable = true
-			info.ResizeMode = "top_level_tail"
+			info.ResizeMode = model.Mode
+			info.Structure = smartArtStructureInfo(model, info.Nodes)
 		} else {
 			info.ResizeReason = reason
 		}
 		result = append(result, info)
 	}
 	return result, nil
+}
+
+func smartArtStructureInfo(model *smartArtResizeModel, nodes []SmartArtNodeInfo) *SmartArtStructureInfo {
+	if model == nil {
+		return nil
+	}
+	nodeIDByModelID := make(map[string]string, len(nodes))
+	for _, node := range nodes {
+		if node.modelID != "" {
+			nodeIDByModelID[node.modelID] = node.NodeID
+		}
+	}
+	info := &SmartArtStructureInfo{
+		Kind:           model.Mode,
+		ResizeStep:     model.ResizeStep,
+		FixedNodeCount: model.FixedNodes,
+		AppendBehavior: smartArtAppendBehavior(model.Mode),
+	}
+	switch model.Mode {
+	case "top_level_tail":
+		for index, node := range model.Nodes {
+			nodeID := nodeIDByModelID[node.ContentID]
+			if nodeID == "" {
+				continue
+			}
+			info.Groups = append(info.Groups, SmartArtStructureGroupInfo{
+				Index:      index,
+				NodeIDs:    []string{nodeID},
+				RootNodeID: nodeID,
+			})
+		}
+	default:
+		for index, group := range model.Groups {
+			groupInfo := SmartArtStructureGroupInfo{Index: index}
+			for _, contentID := range group.ContentIDs {
+				if nodeID := nodeIDByModelID[contentID]; nodeID != "" {
+					groupInfo.NodeIDs = append(groupInfo.NodeIDs, nodeID)
+				}
+			}
+			if nodeID := nodeIDByModelID[group.Root.ContentID]; nodeID != "" {
+				groupInfo.RootNodeID = nodeID
+			}
+			for _, child := range group.Children {
+				if nodeID := nodeIDByModelID[child.ContentID]; nodeID != "" {
+					groupInfo.ChildNodeIDs = append(groupInfo.ChildNodeIDs, nodeID)
+				}
+			}
+			if len(groupInfo.NodeIDs) != 0 {
+				info.Groups = append(info.Groups, groupInfo)
+			}
+		}
+	}
+	return info
+}
+
+func smartArtAppendBehavior(mode string) string {
+	switch mode {
+	case "top_level_tail":
+		return "resize by changing the complete flat nodes array length by 1"
+	case "list_flat_composite_tail":
+		return "resize by changing the complete flat nodes array length by 1"
+	case "list_group_tail":
+		return "use structure_ops add_child to add only a child under a chosen parent, add_root to add only an empty parent, or resize the complete flat nodes array by 2 for the legacy combined tail behavior"
+	case "list_single_root_tail":
+		return "use structure_ops add_child to add only a child under the single root, add_root to add only an empty parent, or resize the complete flat nodes array by 2 for the legacy combined tail behavior"
+	default:
+		return ""
+	}
 }
 
 func smartArtFrames(root *xmlNode) []*xmlNode {
@@ -153,6 +251,7 @@ func smartArtRelIDs(frame *xmlNode) *xmlNode {
 
 func smartArtNodeRefs(dataRoot, drawingRoot *xmlNode) []smartArtNodeRef {
 	textShapeIDs := smartArtDrawingTextShapeIDs(drawingRoot)
+	hasDrawingCache := drawingRoot != nil
 	candidatesByContent := map[string][]smartArtPresCandidate{}
 	presAttrs := map[string]*xmlNode{}
 	for _, pt := range dataRoot.descendants(nsDiagram, "pt") {
@@ -202,7 +301,17 @@ func smartArtNodeRefs(dataRoot, drawingRoot *xmlNode) []smartArtNodeRef {
 			continue
 		}
 		candidates := smartArtBestPresCandidates(candidatesByContent[modelID])
+		if len(candidates) == 0 && !hasDrawingCache {
+			candidates = smartArtFallbackPresCandidates(candidatesByContent[modelID])
+		}
 		if len(candidates) == 0 {
+			if !hasDrawingCache && pt.child(nsDiagram, "t") != nil {
+				nodes = append(nodes, smartArtNodeRef{
+					ModelID: modelID,
+					Index:   contentOrder,
+					Text:    strings.Join(paragraphTexts(pt.child(nsDiagram, "t")), "\n"),
+				})
+			}
 			contentOrder++
 			continue
 		}
@@ -222,6 +331,25 @@ func smartArtNodeRefs(dataRoot, drawingRoot *xmlNode) []smartArtNodeRef {
 		return nodes[i].Index < nodes[j].Index
 	})
 	return nodes
+}
+
+func smartArtFallbackPresCandidates(candidates []smartArtPresCandidate) []smartArtPresCandidate {
+	unique := make([]smartArtPresCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		if candidate.ID == "" || seen[candidate.ID] {
+			continue
+		}
+		seen[candidate.ID] = true
+		unique = append(unique, candidate)
+	}
+	sort.SliceStable(unique, func(i, j int) bool {
+		if unique[i].Index != unique[j].Index {
+			return unique[i].Index < unique[j].Index
+		}
+		return unique[i].ID < unique[j].ID
+	})
+	return unique
 }
 
 func smartArtDrawingTextShapeIDs(root *xmlNode) map[string]bool {
@@ -373,6 +501,42 @@ func checkSmartArts(report *CheckReport, planIndex int, slide *SlideLibraryItem,
 			}
 			continue
 		}
+		for _, op := range edit.StructureOps {
+			if smartArt.Structure == nil {
+				if !op.Optional {
+					addCheck(report, "ERROR", CheckResult{
+						"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
+						"message": "SmartArt structure operation requires a resizable structured SmartArt",
+					})
+				}
+				continue
+			}
+			switch op.Op {
+			case "add_child":
+				if smartArtStructureGroupByRootNodeID(smartArt.Structure, op.ParentNodeID) == nil {
+					if !op.Optional {
+						addCheck(report, "ERROR", CheckResult{
+							"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
+							"node_id": op.ParentNodeID, "message": "SmartArt parent node target not found",
+						})
+					}
+					continue
+				}
+			case "add_root":
+			default:
+				if !op.Optional {
+					addCheck(report, "ERROR", CheckResult{
+						"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
+						"message": "Unsupported SmartArt structure operation: " + op.Op,
+					})
+				}
+				continue
+			}
+			addCheck(report, "OK", CheckResult{
+				"plan_slide": planIndex, "source_slide": slide.SlideIndex, "smartart_id": smartArt.SmartArtID,
+				"message": "SmartArt structure operation is valid",
+			})
+		}
 		for index, node := range edit.Nodes {
 			target := smartArtNodeByEdit(smartArt, node, index)
 			if target == nil {
@@ -390,6 +554,18 @@ func checkSmartArts(report *CheckReport, planIndex int, slide *SlideLibraryItem,
 			})
 		}
 	}
+}
+
+func smartArtStructureGroupByRootNodeID(info *SmartArtStructureInfo, nodeID string) *SmartArtStructureGroupInfo {
+	if info == nil || nodeID == "" {
+		return nil
+	}
+	for index := range info.Groups {
+		if info.Groups[index].RootNodeID == nodeID {
+			return &info.Groups[index]
+		}
+	}
+	return nil
 }
 
 func findSmartArt(slide *SlideLibraryItem, edit SmartArtEdit) (*SmartArtInfo, string) {
@@ -488,6 +664,9 @@ func applySmartArtEdit(pkg *Package, frame *xmlNode, rels *Relationships, types 
 			return applySmartArtResizeEdit(pkg, rels, types, sourceSlide, slidePart, shapeID, dataPart, dataRoot, edit)
 		}
 	}
+	if len(edit.StructureOps) != 0 {
+		return applySmartArtStructureOps(pkg, rels, types, sourceSlide, slidePart, shapeID, dataPart, dataRoot, edit.StructureOps)
+	}
 	drawingRoot, drawingPart, err := smartArtDrawingRoot(pkg, slidePart, rels, dataRoot)
 	if err != nil {
 		return fmt.Errorf("SmartArt %s on slide %d: %w", shapeID, sourceSlide, err)
@@ -543,6 +722,65 @@ func applySmartArtEdit(pkg *Package, frame *xmlNode, rels *Relationships, types 
 	return nil
 }
 
+func applySmartArtStructureOps(pkg *Package, rels *Relationships, types *ContentTypes, sourceSlide int, slidePart, shapeID, dataPart string, dataRoot *xmlNode, ops []SmartArtStructureOp) error {
+	model, reason := smartArtResizeModelFromData(dataRoot)
+	if model == nil {
+		return fmt.Errorf("SmartArt %s on slide %d cannot edit SmartArt structure: %s", shapeID, sourceSlide, reason)
+	}
+	drawingRoot, _, err := smartArtDrawingRoot(pkg, slidePart, rels, dataRoot)
+	if err != nil {
+		return fmt.Errorf("SmartArt %s on slide %d: %w", shapeID, sourceSlide, err)
+	}
+	nodeRefs := smartArtNodeRefs(dataRoot, drawingRoot)
+	contentIDByNodeID := make(map[string]string, len(nodeRefs))
+	for index, ref := range nodeRefs {
+		contentIDByNodeID[fmt.Sprintf("s%02d_sa%s_n%02d", sourceSlide, shapeID, index+1)] = ref.ModelID
+	}
+	for _, op := range ops {
+		var newContentID string
+		var err error
+		switch op.Op {
+		case "add_child":
+			parentContentID := contentIDByNodeID[op.ParentNodeID]
+			if parentContentID == "" {
+				if op.Optional {
+					continue
+				}
+				return fmt.Errorf("SmartArt %s on slide %d: parent node target not found: %s", shapeID, sourceSlide, op.ParentNodeID)
+			}
+			newContentID, err = appendSmartArtChildToParent(dataRoot, model, parentContentID)
+		case "add_root":
+			newContentID, err = appendSmartArtRootOnly(dataRoot, model)
+		default:
+			if op.Optional {
+				continue
+			}
+			return fmt.Errorf("SmartArt %s on slide %d: unsupported SmartArt structure operation: %s", shapeID, sourceSlide, op.Op)
+		}
+		if err != nil {
+			if op.Optional {
+				continue
+			}
+			return fmt.Errorf("SmartArt %s on slide %d: %w", shapeID, sourceSlide, err)
+		}
+		if newContentID != "" && !setSmartArtDataText(dataRoot, newContentID, smartArtStructureOpText(op)) {
+			return fmt.Errorf("SmartArt %s on slide %d: node data not found: %s", shapeID, sourceSlide, newContentID)
+		}
+		model, reason = smartArtResizeModelFromData(dataRoot)
+		if model == nil {
+			return fmt.Errorf("SmartArt %s on slide %d cannot edit SmartArt structure: %s", shapeID, sourceSlide, reason)
+		}
+	}
+	if err := removeSmartArtDrawingCache(pkg, rels, types, slidePart, dataRoot); err != nil {
+		return fmt.Errorf("SmartArt %s on slide %d: %w", shapeID, sourceSlide, err)
+	}
+	data, err := marshalXML(dataRoot)
+	if err != nil {
+		return err
+	}
+	return pkg.SetPart(dataPart, data)
+}
+
 func applySmartArtResizeEdit(pkg *Package, rels *Relationships, types *ContentTypes, sourceSlide int, slidePart, shapeID, dataPart string, dataRoot *xmlNode, edit SmartArtEdit) error {
 	if len(edit.Nodes) == 0 || len(edit.Nodes) > 20 {
 		return fmt.Errorf("SmartArt %s on slide %d resize needs 1 to 20 nodes", shapeID, sourceSlide)
@@ -556,8 +794,12 @@ func applySmartArtResizeEdit(pkg *Package, rels *Relationships, types *ContentTy
 	if model == nil {
 		return fmt.Errorf("SmartArt %s on slide %d cannot resize nodes: %s", shapeID, sourceSlide, reason)
 	}
+	resizeDelta := len(edit.Nodes) - len(model.Nodes)
+	if model.ResizeStep <= 0 || len(edit.Nodes) < model.FixedNodes || (resizeDelta != 0 && absInt(resizeDelta)%model.ResizeStep != 0) {
+		return fmt.Errorf("SmartArt %s on slide %d resize needs a complete %s node group", shapeID, sourceSlide, model.Mode)
+	}
 	for len(model.Nodes) < len(edit.Nodes) {
-		if err := appendSmartArtResizeNode(dataRoot, model); err != nil {
+		if err := appendSmartArtResizeGroup(dataRoot, model); err != nil {
 			return fmt.Errorf("SmartArt %s on slide %d: %w", shapeID, sourceSlide, err)
 		}
 		model, reason = smartArtResizeModelFromData(dataRoot)
@@ -566,7 +808,7 @@ func applySmartArtResizeEdit(pkg *Package, rels *Relationships, types *ContentTy
 		}
 	}
 	for len(model.Nodes) > len(edit.Nodes) {
-		if err := deleteSmartArtResizeTailNode(dataRoot, model); err != nil {
+		if err := deleteSmartArtResizeTailGroup(dataRoot, model); err != nil {
 			return fmt.Errorf("SmartArt %s on slide %d: %w", shapeID, sourceSlide, err)
 		}
 		model, reason = smartArtResizeModelFromData(dataRoot)
@@ -590,6 +832,29 @@ func applySmartArtResizeEdit(pkg *Package, rels *Relationships, types *ContentTy
 }
 
 func smartArtResizeModelFromData(dataRoot *xmlNode) (*smartArtResizeModel, string) {
+	if model, reason := topLevelTailSmartArtResizeModelFromData(dataRoot); model != nil {
+		return model, ""
+	} else if reason == "diagram point list or connection list is missing" {
+		return nil, reason
+	}
+	if model, reason := genericListSmartArtResizeModelFromData(dataRoot, "list_flat_composite_tail"); model != nil {
+		return model, ""
+	} else if reason == "diagram point list or connection list is missing" || reason == "diagram root nodes are missing" {
+		return nil, reason
+	}
+	if model, reason := genericListSmartArtResizeModelFromData(dataRoot, "list_group_tail"); model != nil {
+		return model, ""
+	} else if reason == "diagram point list or connection list is missing" || reason == "diagram root nodes are missing" {
+		return nil, reason
+	}
+	if model, reason := genericListSmartArtResizeModelFromData(dataRoot, "list_single_root_tail"); model != nil {
+		return model, ""
+	} else {
+		return nil, reason
+	}
+}
+
+func topLevelTailSmartArtResizeModelFromData(dataRoot *xmlNode) (*smartArtResizeModel, string) {
 	ptList := dataRoot.child(nsDiagram, "ptLst")
 	cxnList := dataRoot.child(nsDiagram, "cxnLst")
 	if ptList == nil || cxnList == nil {
@@ -670,7 +935,7 @@ func smartArtResizeModelFromData(dataRoot *xmlNode) (*smartArtResizeModel, strin
 		return nil, "at least two top-level SmartArt nodes are required for tail resize"
 	}
 
-	model := &smartArtResizeModel{PtList: ptList, CxnList: cxnList, DocID: docID, DiagramPresID: diagramPresID}
+	model := &smartArtResizeModel{PtList: ptList, CxnList: cxnList, DocID: docID, DiagramPresID: diagramPresID, Mode: "top_level_tail", GroupNodes: 1, ResizeStep: 1}
 	seenContent := map[string]bool{}
 	for index, cxn := range normalCxns {
 		if smartArtIntAttr(cxn, "srcOrd") != index {
@@ -710,6 +975,771 @@ func smartArtResizeModelFromData(dataRoot *xmlNode) (*smartArtResizeModel, strin
 		}
 	}
 	return model, ""
+}
+
+type smartArtResizeContext struct {
+	PtList        *xmlNode
+	CxnList       *xmlNode
+	Points        map[string]*xmlNode
+	DocID         string
+	DiagramPresID string
+	NormalBySrc   map[string][]*xmlNode
+	PresOfBySrc   map[string][]*xmlNode
+	PresParBySrc  map[string][]*xmlNode
+	PresByAssoc   map[string][]*xmlNode
+}
+
+func genericListSmartArtResizeModelFromData(dataRoot *xmlNode, mode string) (*smartArtResizeModel, string) {
+	ctx, reason := smartArtResizeContextFromData(dataRoot)
+	if reason != "" {
+		return nil, reason
+	}
+	rootCxns := smartArtSortedCxns(ctx.NormalBySrc[ctx.DocID])
+	if len(rootCxns) == 0 {
+		return nil, "top-level SmartArt nodes are missing"
+	}
+	model := &smartArtResizeModel{
+		PtList: ctx.PtList, CxnList: ctx.CxnList, DocID: ctx.DocID, DiagramPresID: ctx.DiagramPresID,
+		Mode: mode,
+	}
+
+	switch mode {
+	case "list_flat_composite_tail":
+		if len(rootCxns) < 2 {
+			return nil, "at least two flat SmartArt nodes are required for tail resize"
+		}
+		for _, cxn := range rootCxns {
+			if len(ctx.NormalBySrc[cxn.attr("", "destId")]) != 0 {
+				return nil, "SmartArt is not a flat list"
+			}
+			group := smartArtResizeGroupFromRootCxn(ctx, cxn, nil)
+			if len(group.ContentIDs) != 1 {
+				return nil, "flat SmartArt group mapping is incomplete"
+			}
+			model.Groups = append(model.Groups, group)
+		}
+		model.GroupNodes = 1
+		model.ResizeStep = 1
+	case "list_group_tail":
+		if len(rootCxns) < 2 {
+			return nil, "at least two SmartArt groups are required for tail resize"
+		}
+		hasChildTemplate := false
+		for _, cxn := range rootCxns {
+			children := smartArtSortedCxns(ctx.NormalBySrc[cxn.attr("", "destId")])
+			if len(children) != 0 {
+				hasChildTemplate = true
+			}
+			for _, child := range children {
+				if len(ctx.NormalBySrc[child.attr("", "destId")]) != 0 {
+					return nil, "nested SmartArt groups are not supported"
+				}
+			}
+			model.Groups = append(model.Groups, smartArtResizeGroupFromRootCxn(ctx, cxn, children))
+		}
+		if !hasChildTemplate {
+			return nil, "SmartArt child node template is missing"
+		}
+		model.GroupNodes = 2
+		model.ResizeStep = 2
+	case "list_single_root_tail":
+		if len(rootCxns) != 1 {
+			return nil, "SmartArt is not a single-root list"
+		}
+		containerID := rootCxns[0].attr("", "destId")
+		children := smartArtSortedCxns(ctx.NormalBySrc[containerID])
+		if len(children) < 1 {
+			return nil, "single-root SmartArt list items are missing"
+		}
+		model.FixedNodes = 1
+		model.GroupNodes = 1
+		model.ResizeStep = 2
+		for _, child := range children {
+			if len(ctx.NormalBySrc[child.attr("", "destId")]) != 0 {
+				return nil, "nested SmartArt list items are not supported"
+			}
+		}
+		model.Groups = append(model.Groups, smartArtResizeGroupFromRootCxn(ctx, rootCxns[0], children))
+	default:
+		return nil, "unsupported SmartArt resize model"
+	}
+
+	if len(model.Groups) == 0 {
+		return nil, "SmartArt resize groups are missing"
+	}
+	if model.GroupNodes == 0 {
+		model.GroupNodes = len(model.Groups[0].ContentIDs)
+	}
+	for _, group := range model.Groups {
+		if model.Mode == "list_flat_composite_tail" && len(group.ContentIDs) != model.GroupNodes {
+			return nil, "SmartArt group content count is not consistent"
+		}
+		for _, contentID := range group.ContentIDs {
+			model.Nodes = append(model.Nodes, smartArtResizeNode{ContentID: contentID, ContentPt: ctx.Points[contentID]})
+		}
+	}
+	if len(model.Nodes) < 2 {
+		return nil, "at least two editable SmartArt nodes are required for tail resize"
+	}
+	if model.ResizeStep == 0 {
+		model.ResizeStep = model.GroupNodes
+	}
+	return model, ""
+}
+
+func smartArtResizeContextFromData(dataRoot *xmlNode) (*smartArtResizeContext, string) {
+	ptList := dataRoot.child(nsDiagram, "ptLst")
+	cxnList := dataRoot.child(nsDiagram, "cxnLst")
+	if ptList == nil || cxnList == nil {
+		return nil, "diagram point list or connection list is missing"
+	}
+	ctx := &smartArtResizeContext{
+		PtList: ptList, CxnList: cxnList, Points: map[string]*xmlNode{}, NormalBySrc: map[string][]*xmlNode{},
+		PresOfBySrc: map[string][]*xmlNode{}, PresParBySrc: map[string][]*xmlNode{}, PresByAssoc: map[string][]*xmlNode{},
+	}
+	for _, pt := range ptList.children(nsDiagram, "pt") {
+		id := pt.attr("", "modelId")
+		if id == "" {
+			continue
+		}
+		ctx.Points[id] = pt
+		if pt.attr("", "type") == "doc" {
+			ctx.DocID = id
+		}
+		if pt.attr("", "type") != "pres" {
+			continue
+		}
+		prSet := pt.child(nsDiagram, "prSet")
+		if prSet == nil {
+			continue
+		}
+		assocID := prSet.attr("", "presAssocID")
+		if assocID != "" {
+			ctx.PresByAssoc[assocID] = append(ctx.PresByAssoc[assocID], pt)
+		}
+		if prSet.attr("", "presName") == "diagram" {
+			ctx.DiagramPresID = id
+		}
+	}
+	for _, cxn := range cxnList.children(nsDiagram, "cxn") {
+		switch cxn.attr("", "type") {
+		case "":
+			ctx.NormalBySrc[cxn.attr("", "srcId")] = append(ctx.NormalBySrc[cxn.attr("", "srcId")], cxn)
+		case "presOf":
+			ctx.PresOfBySrc[cxn.attr("", "srcId")] = append(ctx.PresOfBySrc[cxn.attr("", "srcId")], cxn)
+		case "presParOf":
+			ctx.PresParBySrc[cxn.attr("", "srcId")] = append(ctx.PresParBySrc[cxn.attr("", "srcId")], cxn)
+		}
+	}
+	if ctx.DiagramPresID == "" {
+		for _, cxn := range ctx.PresOfBySrc[ctx.DocID] {
+			if destID := cxn.attr("", "destId"); ctx.Points[destID] != nil && ctx.Points[destID].attr("", "type") == "pres" {
+				ctx.DiagramPresID = destID
+				break
+			}
+		}
+	}
+	if ctx.DocID == "" || ctx.DiagramPresID == "" {
+		return nil, "diagram root nodes are missing"
+	}
+	return ctx, ""
+}
+
+func smartArtResizeGroupFromRootCxn(ctx *smartArtResizeContext, root *xmlNode, childCxns []*xmlNode) smartArtResizeGroup {
+	group := smartArtResizeGroup{RootCxn: root, RootSibTransID: root.attr("", "sibTransId")}
+	group.Root = smartArtResizeUnitFromCxn(ctx, root)
+	for _, cxn := range append([]*xmlNode{root}, childCxns...) {
+		contentID := cxn.attr("", "destId")
+		group.ContentIDs = append(group.ContentIDs, contentID)
+		group.PointIDs = append(group.PointIDs, contentID, cxn.attr("", "parTransId"), cxn.attr("", "sibTransId"))
+		group.CxnIDs = append(group.CxnIDs, cxn.attr("", "modelId"))
+	}
+	for _, child := range childCxns {
+		group.Children = append(group.Children, smartArtResizeUnitFromCxn(ctx, child))
+	}
+	group.PointIDs = smartArtUniqueIDs(group.PointIDs)
+	group.ContentIDs = smartArtUniqueIDs(group.ContentIDs)
+	group.PresIDs, group.TransitionPresIDs = smartArtPresIDsForGroup(ctx, group)
+	group.CxnIDs = append(group.CxnIDs, smartArtCxnIDsForGroup(ctx, group.PresIDs, group.PointIDs)...)
+	group.CxnIDs = smartArtUniqueIDs(group.CxnIDs)
+	group.TransitionCxnIDs = smartArtCxnIDsForGroup(ctx, group.TransitionPresIDs, []string{group.RootSibTransID})
+	return group
+}
+
+func smartArtResizeUnitFromCxn(ctx *smartArtResizeContext, cxn *xmlNode) smartArtResizeUnit {
+	unit := smartArtResizeUnit{
+		ContentID:  cxn.attr("", "destId"),
+		NormalCxn:  cxn,
+		SibTransID: cxn.attr("", "sibTransId"),
+	}
+	unit.PointIDs = smartArtUniqueIDs([]string{unit.ContentID, cxn.attr("", "parTransId"), cxn.attr("", "sibTransId")})
+	unit.CxnIDs = smartArtUniqueIDs([]string{cxn.attr("", "modelId")})
+	unit.PresIDs, unit.TransitionPresIDs = smartArtPresIDsForPointIDs(ctx, unit.PointIDs, unit.SibTransID)
+	unit.CxnIDs = append(unit.CxnIDs, smartArtCxnIDsForGroup(ctx, unit.PresIDs, unit.PointIDs)...)
+	unit.CxnIDs = smartArtUniqueIDs(unit.CxnIDs)
+	unit.TransitionCxnIDs = smartArtCxnIDsForGroup(ctx, unit.TransitionPresIDs, []string{unit.SibTransID})
+	return unit
+}
+
+func smartArtPresIDsForGroup(ctx *smartArtResizeContext, group smartArtResizeGroup) ([]string, []string) {
+	return smartArtPresIDsForPointIDs(ctx, group.PointIDs, group.RootSibTransID)
+}
+
+func smartArtPresIDsForPointIDs(ctx *smartArtResizeContext, pointIDs []string, transitionSibTransID string) ([]string, []string) {
+	starts := map[string]bool{}
+	transitionStarts := map[string]bool{}
+	for _, id := range pointIDs {
+		for _, pres := range ctx.PresByAssoc[id] {
+			presID := pres.attr("", "modelId")
+			starts[presID] = true
+			if id == transitionSibTransID {
+				transitionStarts[presID] = true
+			}
+		}
+	}
+	all := smartArtCollectPresSubtree(ctx, starts)
+	transitions := smartArtCollectPresSubtree(ctx, transitionStarts)
+	return smartArtSortedPointIDs(ctx.PtList, all), smartArtSortedPointIDs(ctx.PtList, transitions)
+}
+
+func smartArtCollectPresSubtree(ctx *smartArtResizeContext, starts map[string]bool) map[string]bool {
+	result := map[string]bool{}
+	var walk func(string)
+	walk = func(id string) {
+		if id == "" || result[id] || ctx.Points[id] == nil {
+			return
+		}
+		result[id] = true
+		for _, cxn := range ctx.PresParBySrc[id] {
+			walk(cxn.attr("", "destId"))
+		}
+	}
+	for id := range starts {
+		walk(id)
+	}
+	return result
+}
+
+func smartArtCxnIDsForGroup(ctx *smartArtResizeContext, presIDs, pointIDs []string) []string {
+	presSet := smartArtIDSet(presIDs)
+	pointSet := smartArtIDSet(pointIDs)
+	var result []string
+	for _, cxn := range ctx.CxnList.children(nsDiagram, "cxn") {
+		id := cxn.attr("", "modelId")
+		if id == "" {
+			continue
+		}
+		switch cxn.attr("", "type") {
+		case "presOf":
+			if pointSet[cxn.attr("", "srcId")] || presSet[cxn.attr("", "destId")] {
+				result = append(result, id)
+			}
+		case "presParOf":
+			if presSet[cxn.attr("", "srcId")] || presSet[cxn.attr("", "destId")] {
+				result = append(result, id)
+			}
+		}
+	}
+	return result
+}
+
+func appendSmartArtResizeGroup(dataRoot *xmlNode, model *smartArtResizeModel) error {
+	switch model.Mode {
+	case "top_level_tail":
+		return appendSmartArtResizeNode(dataRoot, model)
+	case "list_group_tail", "list_single_root_tail":
+		return appendSmartArtPromotedTailGroup(dataRoot, model)
+	default:
+		return appendSmartArtClonedTailGroup(dataRoot, model)
+	}
+}
+
+func appendSmartArtClonedTailGroup(dataRoot *xmlNode, model *smartArtResizeModel) error {
+	if len(model.Groups) < 2 {
+		return fmt.Errorf("at least two existing groups are required before append")
+	}
+	ctx, reason := smartArtResizeContextFromData(dataRoot)
+	if reason != "" {
+		return fmt.Errorf("%s", reason)
+	}
+	ids := smartArtModelIDs(dataRoot)
+	last := model.Groups[len(model.Groups)-1]
+	prev := model.Groups[len(model.Groups)-2]
+	if len(prev.TransitionPresIDs) != 0 {
+		if err := cloneSmartArtResizeSegment(ctx, ids, prev.TransitionPresIDs, prev.TransitionCxnIDs, map[string]string{
+			prev.RootSibTransID: last.RootSibTransID,
+		}, nil); err != nil {
+			return err
+		}
+	}
+	overrides := map[string]string{}
+	for _, id := range append(last.PointIDs, last.PresIDs...) {
+		overrides[id] = smartArtNewModelID(ids)
+	}
+	for _, id := range last.CxnIDs {
+		overrides[id] = smartArtNewModelID(ids)
+	}
+	rootOrd := strconv.Itoa(len(model.Groups))
+	if model.Mode == "list_single_root_tail" {
+		rootOrd = strconv.Itoa(len(model.Groups))
+	}
+	if err := cloneSmartArtResizeSegment(ctx, ids, append(last.PointIDs, last.PresIDs...), last.CxnIDs, overrides, map[string]string{
+		"rootOrd":   rootOrd,
+		"rootCxnID": last.RootCxn.attr("", "modelId"),
+	}); err != nil {
+		return err
+	}
+	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
+		smartArtRenumberGenericResizeModel(refreshed)
+		if refreshed.Mode == "list_flat_composite_tail" {
+			smartArtMoveNewestRootCxnBeforeFirstRootCxn(refreshed)
+		}
+	}
+	return nil
+}
+
+func appendSmartArtPromotedTailGroup(dataRoot *xmlNode, model *smartArtResizeModel) error {
+	if len(model.Groups) == 0 {
+		return fmt.Errorf("SmartArt resize groups are missing")
+	}
+	tail := model.Groups[len(model.Groups)-1]
+	if _, err := appendSmartArtChildToParent(dataRoot, model, tail.Root.ContentID); err != nil {
+		return err
+	}
+	refreshed, reason := smartArtResizeModelFromData(dataRoot)
+	if refreshed == nil {
+		return fmt.Errorf("%s", reason)
+	}
+	if _, err := appendSmartArtRootOnly(dataRoot, refreshed); err != nil {
+		return err
+	}
+	return nil
+}
+
+func appendSmartArtChildToParent(dataRoot *xmlNode, model *smartArtResizeModel, parentContentID string) (string, error) {
+	if model.Mode != "list_group_tail" && model.Mode != "list_single_root_tail" {
+		return "", fmt.Errorf("add_child is supported only for parent/child SmartArt lists")
+	}
+	targetIndex := -1
+	for index, group := range model.Groups {
+		if group.Root.ContentID == parentContentID {
+			targetIndex = index
+			break
+		}
+	}
+	if targetIndex < 0 {
+		return "", fmt.Errorf("add_child parent must be a root node")
+	}
+	ctx, reason := smartArtResizeContextFromData(dataRoot)
+	if reason != "" {
+		return "", fmt.Errorf("%s", reason)
+	}
+	ids := smartArtModelIDs(dataRoot)
+	target := model.Groups[targetIndex]
+	childTemplate, ok := smartArtTailChildTemplate(model.Groups)
+	if !ok {
+		return "", fmt.Errorf("SmartArt child node template is missing")
+	}
+	if sharedPresID := smartArtSharedChildTextPresID(ctx, target); sharedPresID != "" {
+		newContentID, err := cloneSmartArtResizeDataUnit(ctx, ids, childTemplate, map[string]string{
+			"normalSrcID": parentContentID,
+			"normalOrd":   strconv.Itoa(len(target.Children)),
+		})
+		if err != nil {
+			return "", err
+		}
+		if err := appendSmartArtSharedChildPresOf(ctx, ids, target, newContentID, sharedPresID); err != nil {
+			return "", err
+		}
+		if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
+			smartArtRenumberGenericResizeModel(refreshed)
+		}
+		return newContentID, nil
+	}
+	if previousChild, ok := smartArtLastChild(target); ok {
+		transitionTemplate, hasTransition := smartArtVisibleTransitionTemplate(target.Children)
+		if !hasTransition {
+			transitionTemplate, hasTransition = smartArtVisibleTransitionTemplateForGroups(model.Groups)
+		}
+		if hasTransition {
+			if err := cloneSmartArtResizeSegment(ctx, ids, transitionTemplate.TransitionPresIDs, transitionTemplate.TransitionCxnIDs, map[string]string{
+				transitionTemplate.SibTransID: previousChild.SibTransID,
+			}, nil); err != nil {
+				return "", err
+			}
+		}
+	}
+	newContentID, err := cloneSmartArtResizeUnit(ctx, ids, childTemplate, map[string]string{
+		"normalSrcID": parentContentID,
+		"normalOrd":   strconv.Itoa(len(target.Children)),
+	})
+	if err != nil {
+		return "", err
+	}
+	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
+		smartArtRenumberGenericResizeModel(refreshed)
+	}
+	return newContentID, nil
+}
+
+func appendSmartArtRootOnly(dataRoot *xmlNode, model *smartArtResizeModel) (string, error) {
+	if model.Mode != "list_group_tail" && model.Mode != "list_single_root_tail" {
+		return "", fmt.Errorf("add_root is supported only for parent/child SmartArt lists")
+	}
+	if len(model.Groups) == 0 {
+		return "", fmt.Errorf("SmartArt resize groups are missing")
+	}
+	ctx, reason := smartArtResizeContextFromData(dataRoot)
+	if reason != "" {
+		return "", fmt.Errorf("%s", reason)
+	}
+	ids := smartArtModelIDs(dataRoot)
+	tail := model.Groups[len(model.Groups)-1]
+	presIDs := smartArtRootOwnPresIDs(ctx, tail)
+	if sharedPresID := smartArtSharedChildTextPresID(ctx, tail); sharedPresID != "" {
+		presIDs = smartArtIDsExcept(presIDs, sharedPresID)
+	}
+	newContentID, err := cloneSmartArtResizeUnitWithPresIDs(ctx, ids, tail.Root, presIDs, map[string]string{
+		"normalSrcID": model.DocID,
+		"normalOrd":   strconv.Itoa(len(model.Groups)),
+	})
+	if err != nil {
+		return "", err
+	}
+	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
+		smartArtRenumberGenericResizeModel(refreshed)
+	}
+	return newContentID, nil
+}
+
+func deleteSmartArtResizeTailGroup(dataRoot *xmlNode, model *smartArtResizeModel) error {
+	switch model.Mode {
+	case "top_level_tail":
+		return deleteSmartArtResizeTailNode(dataRoot, model)
+	case "list_group_tail", "list_single_root_tail":
+		return deleteSmartArtPromotedTailGroup(dataRoot, model)
+	default:
+		return deleteSmartArtClonedTailGroup(dataRoot, model)
+	}
+}
+
+func deleteSmartArtClonedTailGroup(dataRoot *xmlNode, model *smartArtResizeModel) error {
+	if len(model.Groups) <= 1 {
+		return fmt.Errorf("SmartArt resize cannot delete the last group")
+	}
+	tail := model.Groups[len(model.Groups)-1]
+	prev := model.Groups[len(model.Groups)-2]
+	removePointIDs := smartArtIDSet(append(append([]string{}, tail.PointIDs...), tail.PresIDs...))
+	for _, id := range prev.TransitionPresIDs {
+		removePointIDs[id] = true
+	}
+	model.PtList.Children = smartArtKeepChildren(model.PtList.Children, removePointIDs)
+
+	removeCxnIDs := smartArtIDSet(tail.CxnIDs)
+	for _, id := range prev.TransitionCxnIDs {
+		removeCxnIDs[id] = true
+	}
+	model.CxnList.Children = smartArtKeepChildren(model.CxnList.Children, removeCxnIDs)
+	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
+		smartArtRenumberGenericResizeModel(refreshed)
+	}
+	return nil
+}
+
+func deleteSmartArtPromotedTailGroup(dataRoot *xmlNode, model *smartArtResizeModel) error {
+	if len(model.Groups) <= 1 {
+		return fmt.Errorf("SmartArt resize cannot delete the last group")
+	}
+	tail := model.Groups[len(model.Groups)-1]
+	prev := model.Groups[len(model.Groups)-2]
+	if len(tail.Children) != 0 || len(prev.Children) == 0 {
+		return fmt.Errorf("SmartArt promoted-tail resize can delete only a trailing empty group")
+	}
+	removePointIDs := smartArtIDSet(append(append([]string{}, tail.Root.PointIDs...), tail.Root.PresIDs...))
+	for _, id := range prev.Children[len(prev.Children)-1].PointIDs {
+		removePointIDs[id] = true
+	}
+	for _, id := range prev.Children[len(prev.Children)-1].PresIDs {
+		removePointIDs[id] = true
+	}
+	if len(prev.Children) > 1 {
+		for _, id := range prev.Children[len(prev.Children)-2].TransitionPresIDs {
+			removePointIDs[id] = true
+		}
+	}
+	for _, id := range prev.TransitionPresIDs {
+		removePointIDs[id] = true
+	}
+	model.PtList.Children = smartArtKeepChildren(model.PtList.Children, removePointIDs)
+
+	removeCxnIDs := smartArtIDSet(tail.Root.CxnIDs)
+	for _, id := range prev.Children[len(prev.Children)-1].CxnIDs {
+		removeCxnIDs[id] = true
+	}
+	if len(prev.Children) > 1 {
+		for _, id := range prev.Children[len(prev.Children)-2].TransitionCxnIDs {
+			removeCxnIDs[id] = true
+		}
+	}
+	for _, id := range prev.TransitionCxnIDs {
+		removeCxnIDs[id] = true
+	}
+	model.CxnList.Children = smartArtKeepChildren(model.CxnList.Children, removeCxnIDs)
+	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
+		smartArtRenumberGenericResizeModel(refreshed)
+	}
+	return nil
+}
+
+func cloneSmartArtResizeSegment(ctx *smartArtResizeContext, used map[string]bool, pointIDs, cxnIDs []string, overrides, options map[string]string) error {
+	pointSet := smartArtIDSet(pointIDs)
+	var normalPoints, presPoints []*xmlNode
+	for _, child := range ctx.PtList.Children {
+		id := child.attr("", "modelId")
+		if !pointSet[id] {
+			continue
+		}
+		clone := child.clone()
+		smartArtRewriteModelRefs(clone, overrides)
+		if clone.attr("", "modelId") == id {
+			newID := smartArtNewModelID(used)
+			overrides[id] = newID
+			clone.setAttr("", "modelId", newID)
+			smartArtRewriteModelRefs(clone, overrides)
+		}
+		if clone.attr("", "type") == "pres" {
+			presPoints = append(presPoints, clone)
+		} else {
+			normalPoints = append(normalPoints, clone)
+		}
+	}
+	if len(normalPoints) != 0 {
+		smartArtInsertBeforeFirstPres(ctx.PtList, normalPoints...)
+	}
+	ctx.PtList.Children = append(ctx.PtList.Children, presPoints...)
+
+	cxnSet := smartArtIDSet(cxnIDs)
+	for _, child := range ctx.CxnList.Children {
+		id := child.attr("", "modelId")
+		if !cxnSet[id] {
+			continue
+		}
+		clone := child.clone()
+		oldID := id
+		smartArtRewriteModelRefs(clone, overrides)
+		if clone.attr("", "modelId") == id {
+			newID := smartArtNewModelID(used)
+			overrides[id] = newID
+			clone.setAttr("", "modelId", newID)
+			smartArtRewriteModelRefs(clone, overrides)
+		}
+		if options != nil && options["rootOrd"] != "" && oldID == options["rootCxnID"] {
+			clone.setAttr("", "srcOrd", options["rootOrd"])
+		}
+		if options != nil && oldID == options["normalCxnID"] {
+			if options["normalSrcID"] != "" {
+				clone.setAttr("", "srcId", options["normalSrcID"])
+			}
+			if options["normalOrd"] != "" {
+				clone.setAttr("", "srcOrd", options["normalOrd"])
+			}
+		}
+		ctx.CxnList.Children = append(ctx.CxnList.Children, clone)
+	}
+	return nil
+}
+
+func cloneSmartArtResizeUnit(ctx *smartArtResizeContext, used map[string]bool, unit smartArtResizeUnit, options map[string]string) (string, error) {
+	return cloneSmartArtResizeUnitWithPresIDs(ctx, used, unit, unit.PresIDs, options)
+}
+
+func cloneSmartArtResizeUnitWithPresIDs(ctx *smartArtResizeContext, used map[string]bool, unit smartArtResizeUnit, presIDs []string, options map[string]string) (string, error) {
+	overrides := map[string]string{}
+	presIDs = smartArtUniqueIDs(presIDs)
+	pointIDs := append(append([]string{}, unit.PointIDs...), presIDs...)
+	for _, id := range pointIDs {
+		overrides[id] = smartArtNewModelID(used)
+	}
+	cxnIDs := []string{}
+	if unit.NormalCxn != nil {
+		cxnIDs = append(cxnIDs, unit.NormalCxn.attr("", "modelId"))
+	}
+	cxnIDs = append(cxnIDs, smartArtCxnIDsForSelectedPres(ctx, presIDs, unit.PointIDs)...)
+	cxnIDs = smartArtUniqueIDs(cxnIDs)
+	for _, id := range cxnIDs {
+		overrides[id] = smartArtNewModelID(used)
+	}
+	if options == nil {
+		options = map[string]string{}
+	}
+	options["normalCxnID"] = unit.NormalCxn.attr("", "modelId")
+	if err := cloneSmartArtResizeSegment(ctx, used, pointIDs, cxnIDs, overrides, options); err != nil {
+		return "", err
+	}
+	return overrides[unit.ContentID], nil
+}
+
+func cloneSmartArtResizeDataUnit(ctx *smartArtResizeContext, used map[string]bool, unit smartArtResizeUnit, options map[string]string) (string, error) {
+	return cloneSmartArtResizeUnitWithPresIDs(ctx, used, unit, nil, options)
+}
+
+func smartArtCxnIDsForSelectedPres(ctx *smartArtResizeContext, presIDs, pointIDs []string) []string {
+	presSet := smartArtIDSet(presIDs)
+	pointSet := smartArtIDSet(pointIDs)
+	var result []string
+	for _, cxn := range ctx.CxnList.children(nsDiagram, "cxn") {
+		id := cxn.attr("", "modelId")
+		if id == "" {
+			continue
+		}
+		switch cxn.attr("", "type") {
+		case "presOf":
+			if pointSet[cxn.attr("", "srcId")] && presSet[cxn.attr("", "destId")] {
+				result = append(result, id)
+			}
+		case "presParOf":
+			if presSet[cxn.attr("", "srcId")] && presSet[cxn.attr("", "destId")] {
+				result = append(result, id)
+			}
+		}
+	}
+	return result
+}
+
+func appendSmartArtSharedChildPresOf(ctx *smartArtResizeContext, used map[string]bool, group smartArtResizeGroup, newContentID, presID string) error {
+	if len(group.Children) == 0 {
+		return fmt.Errorf("SmartArt shared child presentation template is missing")
+	}
+	var template *xmlNode
+	for _, cxn := range ctx.PresOfBySrc[group.Children[0].ContentID] {
+		if cxn.attr("", "destId") == presID {
+			template = cxn
+			break
+		}
+	}
+	if template == nil {
+		for _, cxn := range ctx.PresOfBySrc[group.Root.ContentID] {
+			if cxn.attr("", "destId") == presID {
+				template = cxn
+				break
+			}
+		}
+	}
+	if template == nil {
+		return fmt.Errorf("SmartArt shared child presentation connection is missing")
+	}
+	clone := template.clone()
+	clone.setAttr("", "modelId", smartArtNewModelID(used))
+	clone.setAttr("", "srcId", newContentID)
+	clone.setAttr("", "destId", presID)
+	ctx.CxnList.Children = append(ctx.CxnList.Children, clone)
+	return nil
+}
+
+func smartArtSharedChildTextPresID(ctx *smartArtResizeContext, group smartArtResizeGroup) string {
+	for _, presID := range group.Root.PresIDs {
+		pt := ctx.Points[presID]
+		if pt == nil {
+			continue
+		}
+		prSet := pt.child(nsDiagram, "prSet")
+		if prSet == nil || prSet.attr("", "presAssocID") != group.Root.ContentID {
+			continue
+		}
+		if strings.EqualFold(prSet.attr("", "presName"), "childText") {
+			return presID
+		}
+	}
+	return ""
+}
+
+func smartArtRootOwnPresIDs(ctx *smartArtResizeContext, group smartArtResizeGroup) []string {
+	result := make([]string, 0, len(group.Root.PresIDs))
+	for _, presID := range group.Root.PresIDs {
+		pt := ctx.Points[presID]
+		if pt == nil {
+			continue
+		}
+		prSet := pt.child(nsDiagram, "prSet")
+		if prSet == nil {
+			result = append(result, presID)
+			continue
+		}
+		if prSet.attr("", "presAssocID") == group.Root.ContentID && !smartArtPresNameLooksLikeChild(prSet.attr("", "presName")) {
+			result = append(result, presID)
+		}
+	}
+	return result
+}
+
+func smartArtPresNameLooksLikeChild(name string) bool {
+	normalized := strings.ToLower(name)
+	return strings.Contains(normalized, "child") ||
+		strings.Contains(normalized, "descendant")
+}
+
+func smartArtIDsExcept(ids []string, exclude string) []string {
+	result := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != exclude {
+			result = append(result, id)
+		}
+	}
+	return result
+}
+
+func smartArtTailChildTemplate(groups []smartArtResizeGroup) (smartArtResizeUnit, bool) {
+	for index := len(groups) - 1; index >= 0; index-- {
+		if child, ok := smartArtLastChild(groups[index]); ok {
+			return child, true
+		}
+	}
+	return smartArtResizeUnit{}, false
+}
+
+func smartArtLastChild(group smartArtResizeGroup) (smartArtResizeUnit, bool) {
+	if len(group.Children) == 0 {
+		return smartArtResizeUnit{}, false
+	}
+	return group.Children[len(group.Children)-1], true
+}
+
+func smartArtVisibleTransitionTemplate(units []smartArtResizeUnit) (smartArtResizeUnit, bool) {
+	for index := len(units) - 1; index >= 0; index-- {
+		if len(units[index].TransitionPresIDs) != 0 {
+			return units[index], true
+		}
+	}
+	return smartArtResizeUnit{}, false
+}
+
+func smartArtVisibleTransitionTemplateForGroups(groups []smartArtResizeGroup) (smartArtResizeUnit, bool) {
+	for groupIndex := len(groups) - 1; groupIndex >= 0; groupIndex-- {
+		if unit, ok := smartArtVisibleTransitionTemplate(groups[groupIndex].Children); ok {
+			return unit, true
+		}
+	}
+	return smartArtResizeUnit{}, false
+}
+
+func smartArtVisibleRootTransitionTemplate(groups []smartArtResizeGroup) (smartArtResizeUnit, bool) {
+	for index := len(groups) - 1; index >= 0; index-- {
+		if len(groups[index].Root.TransitionPresIDs) != 0 {
+			return groups[index].Root, true
+		}
+	}
+	return smartArtResizeUnit{}, false
+}
+
+func smartArtRewriteModelRefs(node *xmlNode, ids map[string]string) {
+	for index := range node.Attr {
+		if replacement := ids[node.Attr[index].Value]; replacement != "" {
+			node.Attr[index].Value = replacement
+		}
+	}
+	for _, child := range node.Children {
+		smartArtRewriteModelRefs(child, ids)
+	}
 }
 
 func appendSmartArtResizeNode(dataRoot *xmlNode, model *smartArtResizeModel) error {
@@ -854,6 +1884,178 @@ func smartArtRenumberResizeModel(model *smartArtResizeModel) {
 	}
 }
 
+func smartArtRenumberGenericResizeModel(model *smartArtResizeModel) {
+	if model.Mode == "top_level_tail" {
+		smartArtRenumberResizeModel(model)
+		return
+	}
+	for groupIndex, group := range model.Groups {
+		if group.RootCxn != nil {
+			group.RootCxn.setAttr("", "srcOrd", strconv.Itoa(groupIndex))
+		}
+	}
+	for _, cxns := range smartArtCxnGroupsBySrc(model.CxnList, "") {
+		sort.SliceStable(cxns, func(i, j int) bool {
+			return smartArtIntAttr(cxns[i], "srcOrd") < smartArtIntAttr(cxns[j], "srcOrd")
+		})
+		for index, cxn := range cxns {
+			cxn.setAttr("", "srcOrd", strconv.Itoa(index))
+		}
+	}
+	contentOrder := map[string]int{}
+	for index, node := range model.Nodes {
+		contentOrder[node.ContentID] = index
+	}
+	type presBucket struct {
+		items []*xmlNode
+	}
+	buckets := map[string]*presBucket{}
+	for _, pt := range model.PtList.children(nsDiagram, "pt") {
+		if pt.attr("", "type") != "pres" {
+			continue
+		}
+		prSet := pt.child(nsDiagram, "prSet")
+		if prSet == nil || prSet.attr("", "presStyleIdx") == "" || prSet.attr("", "presStyleCnt") == "" {
+			continue
+		}
+		assocID := prSet.attr("", "presAssocID")
+		if _, ok := contentOrder[assocID]; !ok {
+			continue
+		}
+		key := prSet.attr("", "presName")
+		if key == "" {
+			key = prSet.attr("", "presStyleLbl")
+		}
+		if key == "" {
+			key = "pres"
+		}
+		if buckets[key] == nil {
+			buckets[key] = &presBucket{}
+		}
+		buckets[key].items = append(buckets[key].items, pt)
+	}
+	for _, bucket := range buckets {
+		sort.SliceStable(bucket.items, func(i, j int) bool {
+			left := bucket.items[i].child(nsDiagram, "prSet").attr("", "presAssocID")
+			right := bucket.items[j].child(nsDiagram, "prSet").attr("", "presAssocID")
+			return contentOrder[left] < contentOrder[right]
+		})
+		for index, pt := range bucket.items {
+			prSet := pt.child(nsDiagram, "prSet")
+			prSet.setAttr("", "presStyleIdx", strconv.Itoa(index))
+			prSet.setAttr("", "presStyleCnt", strconv.Itoa(len(bucket.items)))
+		}
+	}
+	smartArtRenumberPresParOfByPhysicalOrder(model.CxnList)
+}
+
+func smartArtMoveNewestRootCxnBeforeFirstRootCxn(model *smartArtResizeModel) {
+	var newest, first *xmlNode
+	newestOrd := -1
+	for _, cxn := range model.CxnList.children(nsDiagram, "cxn") {
+		if cxn.attr("", "type") != "" || cxn.attr("", "srcId") != model.DocID {
+			continue
+		}
+		ord := smartArtIntAttr(cxn, "srcOrd")
+		if ord == 0 {
+			first = cxn
+		}
+		if ord > newestOrd {
+			newestOrd = ord
+			newest = cxn
+		}
+	}
+	if newest == nil || first == nil || newest == first {
+		return
+	}
+	model.CxnList.Children = smartArtMoveChildBefore(model.CxnList.Children, newest, first)
+}
+
+func smartArtRenumberPresParOfByPhysicalOrder(cxnList *xmlNode) {
+	nextOrdBySrc := map[string]int{}
+	for _, cxn := range cxnList.children(nsDiagram, "cxn") {
+		if cxn.attr("", "type") != "presParOf" {
+			continue
+		}
+		srcID := cxn.attr("", "srcId")
+		cxn.setAttr("", "srcOrd", strconv.Itoa(nextOrdBySrc[srcID]))
+		nextOrdBySrc[srcID]++
+	}
+}
+
+func smartArtMoveChildBefore(children []*xmlNode, moving, before *xmlNode) []*xmlNode {
+	if moving == nil || before == nil || moving == before {
+		return children
+	}
+	result := make([]*xmlNode, 0, len(children))
+	for _, child := range children {
+		if child == moving {
+			continue
+		}
+		if child == before {
+			result = append(result, moving)
+		}
+		result = append(result, child)
+	}
+	if len(result) == len(children)-1 {
+		result = append(result, moving)
+	}
+	return result
+}
+
+func smartArtCxnGroupsBySrc(cxnList *xmlNode, cxnType string) map[string][]*xmlNode {
+	result := map[string][]*xmlNode{}
+	for _, cxn := range cxnList.children(nsDiagram, "cxn") {
+		if cxn.attr("", "type") != cxnType {
+			continue
+		}
+		result[cxn.attr("", "srcId")] = append(result[cxn.attr("", "srcId")], cxn)
+	}
+	return result
+}
+
+func smartArtSortedCxns(cxns []*xmlNode) []*xmlNode {
+	result := append([]*xmlNode(nil), cxns...)
+	sort.SliceStable(result, func(i, j int) bool {
+		return smartArtIntAttr(result[i], "srcOrd") < smartArtIntAttr(result[j], "srcOrd")
+	})
+	return result
+}
+
+func smartArtUniqueIDs(ids []string) []string {
+	seen := map[string]bool{}
+	var result []string
+	for _, id := range ids {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		result = append(result, id)
+	}
+	return result
+}
+
+func smartArtIDSet(ids []string) map[string]bool {
+	result := map[string]bool{}
+	for _, id := range ids {
+		if id != "" {
+			result[id] = true
+		}
+	}
+	return result
+}
+
+func smartArtSortedPointIDs(ptList *xmlNode, ids map[string]bool) []string {
+	var result []string
+	for _, pt := range ptList.children(nsDiagram, "pt") {
+		id := pt.attr("", "modelId")
+		if ids[id] {
+			result = append(result, id)
+		}
+	}
+	return result
+}
+
 func smartArtInsertBeforeFirstPres(ptList *xmlNode, nodes ...*xmlNode) {
 	insertAt := len(ptList.Children)
 	for index, child := range ptList.Children {
@@ -935,6 +2137,13 @@ func smartArtIntAttr(node *xmlNode, name string) int {
 	value, err := strconv.Atoi(node.attr("", name))
 	if err != nil {
 		return -1
+	}
+	return value
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
 	}
 	return value
 }
@@ -1040,6 +2249,13 @@ func smartArtEditText(edit SmartArtNodeEdit) string {
 		return strings.Join(edit.Paragraphs, "\n")
 	}
 	return edit.Text
+}
+
+func smartArtStructureOpText(op SmartArtStructureOp) string {
+	if op.Paragraphs != nil {
+		return strings.Join(op.Paragraphs, "\n")
+	}
+	return op.Text
 }
 
 func smartArtSelectors(value SmartArtEdit) []string {

@@ -115,17 +115,33 @@ type SmartArtNodeInfo struct {
 	presIDs        []string
 }
 
+type SmartArtStructureGroupInfo struct {
+	Index        int      `json:"index"`
+	NodeIDs      []string `json:"node_ids"`
+	RootNodeID   string   `json:"root_node_id,omitempty"`
+	ChildNodeIDs []string `json:"child_node_ids,omitempty"`
+}
+
+type SmartArtStructureInfo struct {
+	Kind           string                       `json:"kind,omitempty"`
+	ResizeStep     int                          `json:"resize_step,omitempty"`
+	FixedNodeCount int                          `json:"fixed_node_count,omitempty"`
+	AppendBehavior string                       `json:"append_behavior,omitempty"`
+	Groups         []SmartArtStructureGroupInfo `json:"groups,omitempty"`
+}
+
 type SmartArtInfo struct {
-	SmartArtID   string             `json:"smartart_id"`
-	ShapeID      string             `json:"shape_id"`
-	ShapeName    string             `json:"shape_name"`
-	Geometry     Geometry           `json:"geometry"`
-	Editable     bool               `json:"editable"`
-	Reason       string             `json:"reason,omitempty"`
-	Resizable    bool               `json:"resizable"`
-	ResizeMode   string             `json:"resize_mode,omitempty"`
-	ResizeReason string             `json:"resize_reason,omitempty"`
-	Nodes        []SmartArtNodeInfo `json:"nodes"`
+	SmartArtID   string                 `json:"smartart_id"`
+	ShapeID      string                 `json:"shape_id"`
+	ShapeName    string                 `json:"shape_name"`
+	Geometry     Geometry               `json:"geometry"`
+	Editable     bool                   `json:"editable"`
+	Reason       string                 `json:"reason,omitempty"`
+	Resizable    bool                   `json:"resizable"`
+	ResizeMode   string                 `json:"resize_mode,omitempty"`
+	ResizeReason string                 `json:"resize_reason,omitempty"`
+	Nodes        []SmartArtNodeInfo     `json:"nodes"`
+	Structure    *SmartArtStructureInfo `json:"structure,omitempty"`
 }
 
 type SlideObject struct {
@@ -211,13 +227,22 @@ type SmartArtNodeEdit struct {
 	Optional   bool     `json:"optional,omitempty"`
 }
 
+type SmartArtStructureOp struct {
+	Op           string   `json:"op"`
+	ParentNodeID string   `json:"parent_node_id,omitempty"`
+	Text         string   `json:"text,omitempty"`
+	Paragraphs   []string `json:"paragraphs,omitempty"`
+	Optional     bool     `json:"optional,omitempty"`
+}
+
 type SmartArtEdit struct {
-	SmartArtID string             `json:"smartart_id,omitempty"`
-	ShapeID    string             `json:"shape_id,omitempty"`
-	ShapeName  string             `json:"shape_name,omitempty"`
-	Resize     bool               `json:"resize,omitempty"`
-	Nodes      []SmartArtNodeEdit `json:"nodes"`
-	Optional   bool               `json:"optional,omitempty"`
+	SmartArtID   string                `json:"smartart_id,omitempty"`
+	ShapeID      string                `json:"shape_id,omitempty"`
+	ShapeName    string                `json:"shape_name,omitempty"`
+	Resize       bool                  `json:"resize,omitempty"`
+	Nodes        []SmartArtNodeEdit    `json:"nodes,omitempty"`
+	StructureOps []SmartArtStructureOp `json:"structure_ops,omitempty"`
+	Optional     bool                  `json:"optional,omitempty"`
 }
 
 type PlanSlide struct {

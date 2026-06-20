@@ -60,35 +60,6 @@ func Analyze(pkg *Package, sourcePPTX string) (*Library, error) {
 		SourcePPTX: sourcePPTX,
 		CanvasPX:   analyzeCanvas(presentation),
 		Slides:     make([]SlideLibraryItem, 0, len(refs)),
-		PlanContract: map[string]interface{}{
-			"schema": PlanSchema,
-			"slides": []interface{}{map[string]interface{}{
-				"source_slide": 1,
-				"purpose":      "封面 / 章节 / 内容 / 结尾",
-				"replacements": []interface{}{map[string]interface{}{
-					"slot_id": "s01_sh2", "text": "替换后的文字", "preserve_line_breaks": false,
-				}},
-				"table_edits": []interface{}{map[string]interface{}{
-					"table_id": "s01_tbl3",
-					"cells":    []interface{}{map[string]interface{}{"row": 0, "col": 0, "text": "替换后的单元格"}},
-				}},
-				"chart_edits": []interface{}{map[string]interface{}{
-					"chart_id": "s01_ch4", "categories": []string{"A", "B"},
-					"series": []interface{}{map[string]interface{}{"name": "系列1", "values": []int{1, 2}}},
-				}},
-				"image_edits": []interface{}{map[string]interface{}{
-					"image_id": "s01_img5", "image_path": "https://example.com/image.png",
-				}},
-				"smartart_edits": []interface{}{map[string]interface{}{
-					"smartart_id": "s01_sa4",
-					"resize":      false,
-					"nodes": []interface{}{
-						map[string]interface{}{"node_id": "s01_sa4_n01", "text": "Replaced node text"},
-						map[string]interface{}{"node_id": "s01_sa4_n02", "paragraphs": []string{"Line 1", "Line 2"}},
-					},
-				}},
-			}},
-		},
 	}
 	for _, ref := range refs {
 		slide, err := pkg.xmlPart(ref.PartName)
@@ -132,7 +103,59 @@ func Analyze(pkg *Package, sourcePPTX string) (*Library, error) {
 		})
 	}
 	library.SlideCount = len(library.Slides)
+	library.PlanContract = planContractForLibrary(library)
 	return library, nil
+}
+
+func planContractForLibrary(library *Library) interface{} {
+	slides := make([]interface{}, 0, len(library.Slides))
+	exampleEdits := planContractExampleEdits()
+	for index, slide := range library.Slides {
+		item := map[string]interface{}{
+			"source_slide": slide.SlideIndex,
+			"purpose":      slide.PageType,
+		}
+		if index == 0 {
+			for key, value := range exampleEdits {
+				item[key] = value
+			}
+		}
+		slides = append(slides, item)
+	}
+	return map[string]interface{}{
+		"schema":        PlanSchema,
+		"source_pptx":   library.SourcePPTX,
+		"usage":         "plan.slides is the generated output slide list, not a patch list. To preserve every source slide, keep one entry for each item in library.slides and add edits only to the slides you want to change.",
+		"slides":        slides,
+		"example_edits": exampleEdits,
+	}
+}
+
+func planContractExampleEdits() map[string]interface{} {
+	return map[string]interface{}{
+		"replacements": []interface{}{map[string]interface{}{
+			"slot_id": "s01_sh2", "text": "替换后的文字", "preserve_line_breaks": false,
+		}},
+		"table_edits": []interface{}{map[string]interface{}{
+			"table_id": "s01_tbl3",
+			"cells":    []interface{}{map[string]interface{}{"row": 0, "col": 0, "text": "替换后的单元格"}},
+		}},
+		"chart_edits": []interface{}{map[string]interface{}{
+			"chart_id": "s01_ch4", "categories": []string{"A", "B"},
+			"series": []interface{}{map[string]interface{}{"name": "系列1", "values": []int{1, 2}}},
+		}},
+		"image_edits": []interface{}{map[string]interface{}{
+			"image_id": "s01_img5", "image_path": "https://example.com/image.png",
+		}},
+		"smartart_edits": []interface{}{map[string]interface{}{
+			"smartart_id": "s01_sa4",
+			"resize":      false,
+			"nodes": []interface{}{
+				map[string]interface{}{"node_id": "s01_sa4_n01", "text": "Replaced node text"},
+				map[string]interface{}{"node_id": "s01_sa4_n02", "paragraphs": []string{"Line 1", "Line 2"}},
+			},
+		}},
+	}
 }
 
 func analyzeCanvas(root *xmlNode) Canvas {
