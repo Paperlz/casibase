@@ -21,6 +21,14 @@ func appendSmartArtResizeGroup(dataRoot *xmlNode, model *smartArtResizeModel) er
 	}
 }
 
+func refreshSmartArtResizeModel(dataRoot *xmlNode) (*smartArtResizeModel, error) {
+	refreshed, reason := smartArtResizeModelFromData(dataRoot)
+	if refreshed == nil {
+		return nil, fmt.Errorf("%s", reason)
+	}
+	return refreshed, nil
+}
+
 func appendSmartArtClonedTailGroup(dataRoot *xmlNode, model *smartArtResizeModel) error {
 	if len(model.Groups) < 2 {
 		return fmt.Errorf("at least two existing groups are required before append")
@@ -46,21 +54,19 @@ func appendSmartArtClonedTailGroup(dataRoot *xmlNode, model *smartArtResizeModel
 	for _, id := range last.CxnIDs {
 		overrides[id] = smartArtNewModelID(ids)
 	}
-	rootOrd := strconv.Itoa(len(model.Groups))
-	if model.Mode == "list_single_root_tail" {
-		rootOrd = strconv.Itoa(len(model.Groups))
-	}
 	if err := cloneSmartArtResizeSegment(ctx, ids, append(last.PointIDs, last.PresIDs...), last.CxnIDs, overrides, map[string]string{
-		"rootOrd":   rootOrd,
+		"rootOrd":   strconv.Itoa(len(model.Groups)),
 		"rootCxnID": last.RootCxn.attr("", "modelId"),
 	}); err != nil {
 		return err
 	}
-	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
-		smartArtRenumberGenericResizeModel(refreshed)
-		if refreshed.Mode == "list_flat_composite_tail" {
-			smartArtMoveNewestRootCxnBeforeFirstRootCxn(refreshed)
-		}
+	refreshed, err := refreshSmartArtResizeModel(dataRoot)
+	if err != nil {
+		return err
+	}
+	smartArtRenumberGenericResizeModel(refreshed)
+	if refreshed.Mode == "list_flat_composite_tail" {
+		smartArtMoveNewestRootCxnBeforeFirstRootCxn(refreshed)
 	}
 	return nil
 }
@@ -118,9 +124,11 @@ func appendSmartArtChildToParent(dataRoot *xmlNode, model *smartArtResizeModel, 
 		if err := appendSmartArtSharedChildPresOf(ctx, ids, target, newContentID, sharedPresID); err != nil {
 			return "", err
 		}
-		if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
-			smartArtRenumberGenericResizeModel(refreshed)
+		refreshed, err := refreshSmartArtResizeModel(dataRoot)
+		if err != nil {
+			return "", err
 		}
+		smartArtRenumberGenericResizeModel(refreshed)
 		return newContentID, nil
 	}
 	if previousChild, ok := smartArtLastChild(target); ok {
@@ -143,9 +151,11 @@ func appendSmartArtChildToParent(dataRoot *xmlNode, model *smartArtResizeModel, 
 	if err != nil {
 		return "", err
 	}
-	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
-		smartArtRenumberGenericResizeModel(refreshed)
+	refreshed, err := refreshSmartArtResizeModel(dataRoot)
+	if err != nil {
+		return "", err
 	}
+	smartArtRenumberGenericResizeModel(refreshed)
 	return newContentID, nil
 }
 
@@ -173,9 +183,11 @@ func appendSmartArtRootOnly(dataRoot *xmlNode, model *smartArtResizeModel) (stri
 	if err != nil {
 		return "", err
 	}
-	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
-		smartArtRenumberGenericResizeModel(refreshed)
+	refreshed, err := refreshSmartArtResizeModel(dataRoot)
+	if err != nil {
+		return "", err
 	}
+	smartArtRenumberGenericResizeModel(refreshed)
 	return newContentID, nil
 }
 
@@ -207,9 +219,11 @@ func deleteSmartArtClonedTailGroup(dataRoot *xmlNode, model *smartArtResizeModel
 		removeCxnIDs[id] = true
 	}
 	model.CxnList.Children = smartArtKeepChildren(model.CxnList.Children, removeCxnIDs)
-	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
-		smartArtRenumberGenericResizeModel(refreshed)
+	refreshed, err := refreshSmartArtResizeModel(dataRoot)
+	if err != nil {
+		return err
 	}
+	smartArtRenumberGenericResizeModel(refreshed)
 	return nil
 }
 
@@ -252,9 +266,11 @@ func deleteSmartArtPromotedTailGroup(dataRoot *xmlNode, model *smartArtResizeMod
 		removeCxnIDs[id] = true
 	}
 	model.CxnList.Children = smartArtKeepChildren(model.CxnList.Children, removeCxnIDs)
-	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
-		smartArtRenumberGenericResizeModel(refreshed)
+	refreshed, err := refreshSmartArtResizeModel(dataRoot)
+	if err != nil {
+		return err
 	}
+	smartArtRenumberGenericResizeModel(refreshed)
 	return nil
 }
 
@@ -321,16 +337,16 @@ func cloneSmartArtResizeUnit(ctx *smartArtResizeContext, used map[string]bool, u
 }
 
 func cloneSmartArtResizeUnitWithPresIDs(ctx *smartArtResizeContext, used map[string]bool, unit smartArtResizeUnit, presIDs []string, options map[string]string) (string, error) {
+	if unit.NormalCxn == nil {
+		return "", fmt.Errorf("SmartArt resize unit normal connection is missing")
+	}
 	overrides := map[string]string{}
 	presIDs = smartArtUniqueIDs(presIDs)
 	pointIDs := append(append([]string{}, unit.PointIDs...), presIDs...)
 	for _, id := range pointIDs {
 		overrides[id] = smartArtNewModelID(used)
 	}
-	cxnIDs := []string{}
-	if unit.NormalCxn != nil {
-		cxnIDs = append(cxnIDs, unit.NormalCxn.attr("", "modelId"))
-	}
+	cxnIDs := []string{unit.NormalCxn.attr("", "modelId")}
 	cxnIDs = append(cxnIDs, smartArtCxnIDsForSelectedPres(ctx, presIDs, unit.PointIDs)...)
 	cxnIDs = smartArtUniqueIDs(cxnIDs)
 	for _, id := range cxnIDs {
@@ -572,9 +588,11 @@ func appendSmartArtResizeNode(dataRoot *xmlNode, model *smartArtResizeModel) err
 	newNodePresParOf.setAttr("", "modelId", newPresParNodeID)
 	newNodePresParOf.setAttr("", "destId", newPresNodeID)
 	model.CxnList.Children = append(model.CxnList.Children, newNormal, newPresOf, newSibPresParOf, newNodePresParOf)
-	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
-		smartArtRenumberResizeModel(refreshed)
+	refreshed, err := refreshSmartArtResizeModel(dataRoot)
+	if err != nil {
+		return err
 	}
+	smartArtRenumberResizeModel(refreshed)
 	return nil
 }
 
@@ -601,8 +619,10 @@ func deleteSmartArtResizeTailNode(dataRoot *xmlNode, model *smartArtResizeModel)
 		removeCxnIDs[prev.SibTransPresParOf.attr("", "modelId")] = true
 	}
 	model.CxnList.Children = smartArtKeepChildren(model.CxnList.Children, removeCxnIDs)
-	if refreshed, _ := smartArtResizeModelFromData(dataRoot); refreshed != nil {
-		smartArtRenumberResizeModel(refreshed)
+	refreshed, err := refreshSmartArtResizeModel(dataRoot)
+	if err != nil {
+		return err
 	}
+	smartArtRenumberResizeModel(refreshed)
 	return nil
 }
