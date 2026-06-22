@@ -115,6 +115,10 @@ func StaticFilter(ctx *context.Context) {
 			}
 			makeGzipResponse(ctx.ResponseWriter, ctx.Request, fallback)
 		} else if embedsupport.WebFS() != nil {
+			err := util.AppendWebConfigCookie(ctx)
+			if err != nil {
+				fmt.Println(err)
+			}
 			embedsupport.ServeEmbedded(ctx.ResponseWriter, ctx.Request, urlPath)
 		} else {
 			ctx.ResponseWriter.Header().Set("Content-Type", "text/html; charset=utf-8")

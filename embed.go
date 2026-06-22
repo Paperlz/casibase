@@ -40,6 +40,10 @@ var _embeddedConf embed.FS
 //go:embed web/build/static/css/*.css
 //go:embed web/build/static/js/*.js web/build/static/js/*.txt
 //go:embed web/build/static/media
+//go:embed web/build/img
+//go:embed web/build/flag-icons
+//go:embed web/build/gravatar
+//go:embed web/build/icon
 var _embeddedWeb embed.FS
 
 //go:embed skills
