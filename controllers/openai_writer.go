@@ -145,16 +145,21 @@ func (w *OpenAIWriter) Close(promptTokens, completionTokens, totalTokens int) er
 			return err
 		}
 
-		// Send usage information as a custom message
-		usage := map[string]interface{}{
-			"usage": openai.Usage{
+		// Send usage information as an OpenAI-compatible stream chunk.
+		usageChunk := openai.ChatCompletionStreamResponse{
+			ID:      "chatcmpl-" + w.RequestID,
+			Object:  "chat.completion.chunk",
+			Created: util.GetCurrentUnixTime(),
+			Model:   w.Model,
+			Choices: []openai.ChatCompletionStreamChoice{},
+			Usage: &openai.Usage{
 				PromptTokens:     promptTokens,
 				CompletionTokens: completionTokens,
 				TotalTokens:      totalTokens,
 			},
 		}
 
-		usageData, err := json.Marshal(usage)
+		usageData, err := json.Marshal(usageChunk)
 		if err != nil {
 			return err
 		}

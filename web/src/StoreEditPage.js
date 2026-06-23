@@ -28,6 +28,7 @@ import i18next from "i18next";
 import FileTree from "./FileTree";
 import ExampleQuestionTable from "./table/ExampleQuestionTable";
 import StoreAvatarUploader from "./AvatarUpload";
+import OpenAiCompatibleConfig from "./OpenAiCompatibleConfig";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -545,6 +546,10 @@ class StoreEditPage extends React.Component {
               24
             )}
           </Row>
+          <OpenAiCompatibleConfig
+            apiKey={store.apiKey}
+            hint={i18next.t("general:Store API integration hint")}
+          />
         </Card>
 
         <Card size="small" title={renderCardTitle(i18next.t("general:Providers"), i18next.t("general:Providers desc"))} style={sectionCardStyle} headStyle={cardHeadStyle}>
