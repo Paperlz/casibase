@@ -30,29 +30,48 @@ type OpenAIWriter struct {
 	Cleaner    Cleaner
 	Buffer     []byte
 	MessageBuf []byte
+	ToolBuf    []byte
 	RequestID  string
 	Stream     bool
 	StreamSent bool
 	Model      string
 }
 
+func getOpenAIEventData(p []byte, eventType string) string {
+	prefix := []byte(fmt.Sprintf("event: %s\ndata: ", eventType))
+	suffix := []byte("\n\n")
+	return string(bytes.TrimSuffix(bytes.TrimPrefix(p, prefix), suffix))
+}
+
 // Write processes incoming data chunks and formats them for OpenAI compatibility
 func (w *OpenAIWriter) Write(p []byte) (n int, err error) {
+	// Always store the original bytes.
+	w.Buffer = append(w.Buffer, p...)
+
+	if len(p) > 0 && p[0] == ':' {
+		return len(p), nil
+	}
+
 	// Parse the incoming SSE message format
 	var content string
 
 	if bytes.HasPrefix(p, []byte("event: message\ndata: ")) {
-		prefix := []byte("event: message\ndata: ")
-		suffix := []byte("\n\n")
-		content = string(bytes.TrimSuffix(bytes.TrimPrefix(p, prefix), suffix))
+		content = getOpenAIEventData(p, "message")
 
 		// Add content to message buffer
 		w.MessageBuf = append(w.MessageBuf, []byte(content)...)
 	} else if bytes.HasPrefix(p, []byte("event: reason\ndata: ")) {
-		// We don't expose reason data in OpenAI format, but we'll store it
-		prefix := []byte("event: reason\ndata: ")
-		suffix := []byte("\n\n")
-		content = string(bytes.TrimSuffix(bytes.TrimPrefix(p, prefix), suffix))
+		return len(p), nil
+	} else if bytes.HasPrefix(p, []byte("event: tool-delta\ndata: ")) || bytes.HasPrefix(p, []byte("event: tool-start\ndata: ")) {
+		return len(p), nil
+	} else if bytes.HasPrefix(p, []byte("event: tool\ndata: ")) {
+		if len(w.ToolBuf) > 0 {
+			w.ToolBuf = append(w.ToolBuf, '\n')
+		}
+		w.ToolBuf = append(w.ToolBuf, []byte(getOpenAIEventData(p, "tool"))...)
+		return len(p), nil
+	} else if bytes.HasPrefix(p, []byte("event: search\ndata: ")) {
+		return len(p), nil
 	} else {
 		// If we can't parse, just store the raw bytes and attempt to clean
 		content = w.Cleaner.CleanString(string(p))
@@ -60,9 +79,6 @@ func (w *OpenAIWriter) Write(p []byte) (n int, err error) {
 			w.MessageBuf = append(w.MessageBuf, []byte(content)...)
 		}
 	}
-
-	// Always store the original bytes
-	w.Buffer = append(w.Buffer, p...)
 
 	// For non-streaming, just collect the data
 	if !w.Stream {
@@ -111,6 +127,10 @@ func (w *OpenAIWriter) Write(p []byte) (n int, err error) {
 // MessageString returns the complete buffered message
 func (w *OpenAIWriter) MessageString() string {
 	return string(w.MessageBuf)
+}
+
+func (w *OpenAIWriter) ToolString() string {
+	return string(w.ToolBuf)
 }
 
 // Close finalizes the stream by sending completion message and DONE marker
