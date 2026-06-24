@@ -13,26 +13,11 @@
 // limitations under the License.
 
 import React from "react";
-import {Button, Col, Input, Row, Space, Tooltip} from "antd";
-import {CopyOutlined} from "@ant-design/icons";
-import copy from "copy-to-clipboard";
+import {Col, Input, Row, Space} from "antd";
 import i18next from "i18next";
 import * as Setting from "./Setting";
+import CopyButton from "./common/CopyButton";
 import {getOpenAiCompatibleBaseUrl, getOpenAiCompatibleChatCompletionsUrl} from "./OpenAiCompatibleSetting";
-
-function CopyButton({value}) {
-  return (
-    <Tooltip title={i18next.t("general:Copy")}>
-      <Button
-        icon={<CopyOutlined />}
-        onClick={() => {
-          copy(value || "");
-          Setting.showMessage("success", i18next.t("general:Successfully copied"));
-        }}
-      />
-    </Tooltip>
-  );
-}
 
 function ReadOnlyCopyInput({value}) {
   return (
@@ -44,7 +29,7 @@ function ReadOnlyCopyInput({value}) {
   );
 }
 
-function OpenAiCompatibleConfig({apiKey, hint}) {
+function OpenAiCompatibleConfig({apiKey, apiKeyLabel, apiKeyDisabled = false, onApiKeyChange, hint}) {
   const baseUrl = getOpenAiCompatibleBaseUrl();
   const chatCompletionsUrl = getOpenAiCompatibleChatCompletionsUrl();
 
@@ -55,11 +40,16 @@ function OpenAiCompatibleConfig({apiKey, hint}) {
         <div style={{color: "var(--ant-color-text-secondary)", fontSize: "13px"}}>{hint}</div>
       </Space>
       <Row gutter={16}>
-        <Col style={{marginTop: "12px"}} span={Setting.isMobile() ? 22 : 7}>
-          <div style={{marginBottom: "4px"}}>{i18next.t("general:API key")}</div>
-          <ReadOnlyCopyInput value={apiKey || ""} />
+        <Col style={{marginTop: "12px"}} span={Setting.isMobile() ? 22 : 8}>
+          <div style={{marginBottom: "4px"}}>{apiKeyLabel || i18next.t("general:API key")}</div>
+          <Input.Password
+            value={apiKey}
+            disabled={apiKeyDisabled}
+            addonAfter={<CopyButton value={apiKey} disabled={apiKeyDisabled} />}
+            onChange={onApiKeyChange}
+          />
         </Col>
-        <Col style={{marginTop: "12px"}} span={Setting.isMobile() ? 22 : 7}>
+        <Col style={{marginTop: "12px"}} span={Setting.isMobile() ? 22 : 8}>
           <div style={{marginBottom: "4px"}}>{i18next.t("general:Base URL")}</div>
           <ReadOnlyCopyInput value={baseUrl} />
         </Col>
