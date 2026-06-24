@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/beego/beego/context"
 	"github.com/sashabaranov/go-openai"
@@ -45,12 +46,19 @@ func getOpenAIEventData(p []byte, eventType string) string {
 
 // Write processes incoming data chunks and formats them for OpenAI compatibility
 func (w *OpenAIWriter) Write(p []byte) (n int, err error) {
+	if len(p) > 0 && p[0] == ':' {
+		if !w.Stream {
+			return len(p), nil
+		}
+		n, err = w.ResponseWriter.Write(p)
+		if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		return n, err
+	}
+
 	// Always store the original bytes.
 	w.Buffer = append(w.Buffer, p...)
-
-	if len(p) > 0 && p[0] == ':' {
-		return len(p), nil
-	}
 
 	// Parse the incoming SSE message format
 	var content string
