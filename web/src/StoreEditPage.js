@@ -785,7 +785,6 @@ class StoreEditPage extends React.Component {
                 options={[
                   {value: "expanded", label: i18next.t("store:Expanded")},
                   {value: "collapsed", label: i18next.t("store:Collapsed")},
-                  {value: "hidden", label: i18next.t("store:Hidden")},
                 ]}
               />,
               8

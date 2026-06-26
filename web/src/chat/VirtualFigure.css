@@ -1,4 +1,6 @@
-/* stylelint-disable */
+/* stylelint-disable selector-class-pattern, color-function-notation, alpha-value-notation, value-keyword-case */
+/* stylelint-disable no-descending-specificity, selector-list-comma-newline-after */
+/* stylelint-disable rule-empty-line-before, declaration-colon-space-after */
 
 /* AI virtual figure beside the main chat window */
 .chat-virtual-figure {

@@ -42,12 +42,7 @@ function loadJson(key, defaultValue) {
   }
 }
 
-function getDefaultCollapsed(mode) {
-  if (mode === "collapsed") {
-    return true;
-  }
-  return false;
-}
+const getDefaultCollapsed = mode => mode === "collapsed";
 
 const statusLabelMap = {
   idle: {key: "chat:Figure idle", label: "Idle"},
@@ -146,6 +141,7 @@ class VirtualFigure extends React.Component {
 
     const nextStore = Setting.deepCopy(store);
     nextStore.figureEnabled = false;
+    // Avoid sending the heavy file tree when only updating figure settings.
     nextStore.fileTree = undefined;
 
     StoreBackend.updateStore(store.owner, store.name, nextStore)
