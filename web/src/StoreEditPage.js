@@ -754,6 +754,42 @@ class StoreEditPage extends React.Component {
               />,
               8
             )}
+            {this.renderStoreSwitch(
+              Setting.getLabel(i18next.t("store:Enable virtual figure"), i18next.t("store:Enable virtual figure - Tooltip")),
+              store.figureEnabled !== false,
+              checked => {
+                this.updateStoreField("figureEnabled", checked);
+              },
+              8
+            )}
+            {this.renderStoreField(
+              Setting.getLabel(i18next.t("store:Virtual figure URL"), i18next.t("store:Virtual figure URL - Tooltip")),
+              <Input
+                value={store.figureUrl}
+                placeholder={Setting.getVirtualFigureUrl()}
+                onChange={e => {
+                  this.updateStoreField("figureUrl", e.target.value);
+                }}
+              />,
+              8
+            )}
+            {this.renderStoreField(
+              Setting.getLabel(i18next.t("store:Virtual figure mode"), i18next.t("store:Virtual figure mode - Tooltip")),
+              <Select
+                virtual={false}
+                style={{width: "100%"}}
+                value={store.figureMode || "expanded"}
+                onChange={value => {
+                  this.updateStoreField("figureMode", value);
+                }}
+                options={[
+                  {value: "expanded", label: i18next.t("store:Expanded")},
+                  {value: "collapsed", label: i18next.t("store:Collapsed")},
+                  {value: "hidden", label: i18next.t("store:Hidden")},
+                ]}
+              />,
+              8
+            )}
             {this.renderStoreField(
               Setting.getLabel(i18next.t("store:Prompt"), i18next.t("store:Prompt - Tooltip")),
               <TextArea autoSize={{minRows: 1, maxRows: 15}} value={store.prompt} onChange={(e) => {

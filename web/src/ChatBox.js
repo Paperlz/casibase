@@ -22,6 +22,7 @@ import ChatExampleQuestions from "./ChatExampleQuestions";
 import MessageList from "./chat/MessageList";
 import ChatInput from "./chat/ChatInput";
 import WelcomeHeader from "./chat/WelcomeHeader";
+import VirtualFigure from "./chat/VirtualFigure";
 import * as MessageBackend from "./backend/MessageBackend";
 import TtsHelper from "./TextToSpeech";
 import SpeechToTextHelper from "./SpeechToText";
@@ -42,6 +43,7 @@ class ChatBox extends React.Component {
       isVoiceInput: false,
       rerenderErrorMessage: false,
       webSearchEnabled: false,
+      figureStatusOverride: "",
     };
     this.synth = window.speechSynthesis;
     this.cursorPosition = undefined;
@@ -52,6 +54,7 @@ class ChatBox extends React.Component {
     this.inputRef = React.createRef();
     this.ttsHelper = new TtsHelper(this);
     this.sttHelper = new SpeechToTextHelper(this);
+    this.figureStatusTimer = null;
   }
 
   setWebSearchEnabled = (enabled) => {
@@ -98,11 +101,34 @@ class ChatBox extends React.Component {
     if (prevProps.name !== this.props.name) {
       this.scheduleFocusInput();
     }
+    if (prevProps.loading === false && this.props.loading === true) {
+      if (this.figureStatusTimer) {
+        clearTimeout(this.figureStatusTimer);
+        this.figureStatusTimer = null;
+      }
+      if (this.state.figureStatusOverride) {
+        this.setState({figureStatusOverride: ""});
+      }
+    }
+    if (prevProps.loading === true && this.props.loading === false && !this.props.messageError) {
+      this.setState({figureStatusOverride: "done"});
+      if (this.figureStatusTimer) {
+        clearTimeout(this.figureStatusTimer);
+      }
+      this.figureStatusTimer = setTimeout(() => {
+        this.setState({figureStatusOverride: ""});
+        this.figureStatusTimer = null;
+      }, 1600);
+    }
   }
 
   componentWillUnmount() {
     inputStore.set(this.props.name, this.state.value);
     this.clearOldStatus();
+    if (this.figureStatusTimer) {
+      clearTimeout(this.figureStatusTimer);
+      this.figureStatusTimer = null;
+    }
   }
 
   clearOldStatus() {
@@ -392,6 +418,26 @@ class ChatBox extends React.Component {
     }
   };
 
+  getFigureStatus(messages) {
+    if (this.props.messageError) {
+      return "error";
+    }
+    if (this.props.loading) {
+      const lastMessage = messages?.length > 0 ? messages[messages.length - 1] : null;
+      if (lastMessage?.isReasoningPhase || (lastMessage?.reasonText && !lastMessage?.text)) {
+        return "thinking";
+      }
+      return "replying";
+    }
+    if (this.state.figureStatusOverride) {
+      return this.state.figureStatusOverride;
+    }
+    if ((this.state.value || "").trim() !== "" || this.state.isVoiceInput) {
+      return "typing";
+    }
+    return "idle";
+  }
+
   handleEditMessage = (message, silent = false) => {
     const editedMessage = {
       ...message,
@@ -434,6 +480,10 @@ class ChatBox extends React.Component {
 
     const urlParams = new URLSearchParams(window.location.search);
     const hasUrlMessage = urlParams.get("newMessage");
+    const showVirtualFigure = this.props.showVirtualFigure === true &&
+      !this.props.hideInput &&
+      !this.props.disableInput &&
+      this.props.store?.figureEnabled !== false;
 
     return (
       <Layout style={{display: "flex", width: "100%", height: "100%", borderRadius: "6px", ...this.props.styles?.layout}}>
@@ -458,6 +508,15 @@ class ChatBox extends React.Component {
             sendMessage={this.sendSuggestionMessage}
             files={this.state.files}
             hideThinking={this.props.store?.hideThinking === true}
+          />
+
+          <VirtualFigure
+            visible={showVirtualFigure}
+            status={this.getFigureStatus(messages)}
+            imageUrl={Setting.getVirtualFigureUrl(this.props.store)}
+            store={this.props.store}
+            onFocusInput={() => this.focusInput()}
+            onStoreUpdate={this.props.onStoreUpdate}
           />
 
           {!this.props.disableInput && (
