@@ -55,15 +55,20 @@ const ChatInput = React.forwardRef(({
 
   const sendButtonDisabled = messageError || (value === "" && files.length === 0) || disableInput;
 
+  function handleFileReadError(resolve) {
+    Setting.showMessage("error", i18next.t("general:Failed to upload"));
+    resolve();
+  }
+
   function handleInputChange(file) {
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onerror = resolve;
+      reader.onerror = () => handleFileReadError(resolve);
 
       if (file.type.startsWith("image/")) {
         reader.onload = (e) => {
           const img = new Image();
-          img.onerror = resolve;
+          img.onerror = () => handleFileReadError(resolve);
           img.onload = () => {
             const originalWidth = img.width;
             const originalHeight = img.height;
