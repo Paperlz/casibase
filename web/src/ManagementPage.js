@@ -366,7 +366,7 @@ function ManagementPage(props) {
       return menuItems;
     }
 
-    const effectiveNavItems = new Set(navItems);
+    const effectiveNavItems = new Set([...navItems, "/hub"]);
 
     const filteredItems = menuItems.map(item => {
       if (!Array.isArray(item.children)) {
