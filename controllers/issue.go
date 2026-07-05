@@ -159,6 +159,15 @@ func (c *ApiController) AddIssue() {
 		c.ResponseError(err.Error())
 		return
 	}
+	if success {
+		storeOwner, storeName, err := util.GetOwnerAndNameFromIdWithError(issue.Store)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+		url := joinNotificationURL(c.requestOrigin(), "agents", storeOwner, storeName, "issues", issue.Owner, issue.Name)
+		notifyIssueWatchers(&issue, object.NotificationEventIssueCreated, username, "created", url)
+	}
 	c.ResponseOk(success)
 }
 
@@ -233,6 +242,15 @@ func (c *ApiController) UpdateIssue() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
+	}
+	if success {
+		storeOwner, storeName, err := util.GetOwnerAndNameFromIdWithError(issue.Store)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+		url := joinNotificationURL(c.requestOrigin(), "agents", storeOwner, storeName, "issues", issue.Owner, issue.Name)
+		notifyIssueWatchers(&issue, object.NotificationEventIssueUpdated, username, "updated", url)
 	}
 	c.ResponseOk(success)
 }

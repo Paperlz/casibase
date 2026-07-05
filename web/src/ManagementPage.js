@@ -39,6 +39,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MessageOutlined,
+  NotificationOutlined,
   OrderedListOutlined,
   RocketOutlined,
   SafetyOutlined,
@@ -108,6 +109,7 @@ import SiteListPage from "./SiteListPage";
 import SiteEditPage from "./SiteEditPage";
 import CommentListPage from "./CommentListPage";
 import CommentEditPage from "./CommentEditPage";
+import NotificationListPage from "./NotificationListPage";
 const {Header, Footer, Content, Sider} = Layout;
 
 function getMenuParentKey(uri) {
@@ -116,7 +118,7 @@ function getMenuParentKey(uri) {
   if (uri.includes("/providers") || uri.includes("/pipes") || uri.includes("/tools") || uri.includes("/servers")) {return "/connectors";}
   if (uri.includes("/files") || uri.includes("/vectors") || uri.includes("/resources")) {return "/knowledge-base";}
   if (uri.includes("/tasks") || uri.includes("/scales") || uri.includes("/forms")) {return "/multimedia";}
-  if (uri.includes("/sessions") || uri.includes("/records") || uri.includes("/snapshots")) {return "/logs";}
+  if (uri.includes("/sessions") || uri.includes("/records") || uri.includes("/snapshots") || uri.includes("/notifications")) {return "/logs";}
   if (uri.includes("/users") || uri.includes("/casdoor-resources") || uri.includes("/permissions")) {return "/identity";}
   if (uri.includes("/sysinfo") || uri.includes("/swagger") || uri.includes("/visitors") || uri.includes("/sites") || uri.includes("/usages") || uri.includes("/comments")) {return "/admin";}
   return null;
@@ -452,6 +454,7 @@ function ManagementPage(props) {
 
       res.push(Setting.getItem(<Link style={{color: textColor}} to="/records">{i18next.t("general:Auditing Logs")}</Link>, "/logs", <WalletOutlined />, [
         Setting.getItem(<Link to="/records">{i18next.t("general:Logs")}</Link>, "/records", <DatabaseOutlined />),
+        Setting.getItem(<Link to="/notifications">{i18next.t("general:Notifications")}</Link>, "/notifications", <NotificationOutlined />),
         Setting.getItem(<Link to="/sessions">{i18next.t("general:Sessions")}</Link>, "/sessions", <OrderedListOutlined />),
         Setting.getItem(<Link to="/snapshots">{i18next.t("general:Snapshots")}</Link>, "/snapshots", <HistoryOutlined />),
       ]));
@@ -574,6 +577,7 @@ function ManagementPage(props) {
         <Route exact path="/sessions" render={(props) => renderSigninIfNotSignedIn(<SessionListPage account={account} {...props} />)} />
         <Route exact path="/snapshots" render={(props) => renderSigninIfNotSignedIn(<SnapshotListPage account={account} {...props} />)} />
         <Route exact path="/records" render={(props) => renderSigninIfNotSignedIn(<RecordListPage account={account} {...props} />)} />
+        <Route exact path="/notifications" render={(props) => renderSigninIfNotSignedIn(<NotificationListPage account={account} {...props} />)} />
         <Route exact path="/records/:organizationName/:recordName" render={(props) => renderSigninIfNotSignedIn(<RecordEditPage account={account} {...props} />)} />
         <Route exact path="/tasks" render={(props) => renderSigninIfNotSignedIn(<TaskListPage account={account} {...props} />)} />
         <Route exact path="/tasks/:owner/:taskName" render={(props) => renderSigninIfNotSignedIn(<TaskEditPage account={account} {...props} />)} />

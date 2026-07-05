@@ -141,6 +141,8 @@ class App extends Component {
       this.setState({selectedMenuKey: "/snapshots"});
     } else if (uri.includes("/records")) {
       this.setState({selectedMenuKey: "/records"});
+    } else if (uri.includes("/notifications")) {
+      this.setState({selectedMenuKey: "/notifications"});
     } else if (uri.includes("/tasks")) {
       this.setState({selectedMenuKey: "/tasks"});
     } else if (uri.includes("/scales")) {

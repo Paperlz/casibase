@@ -77,6 +77,12 @@ func GetStoreFavoriteCount(favoriteType, storeOwner, storeName, hubDbName string
 	return count, err
 }
 
+func GetStoreWatchers(storeOwner, storeName string) ([]*StoreFavorite, error) {
+	favorites := []*StoreFavorite{}
+	err := adapter.engine.Where("type = ? and store_owner = ? and store_name = ?", FavoriteTypeWatch, storeOwner, storeName).Asc("created_time").Find(&favorites)
+	return favorites, err
+}
+
 // ToggleStoreFavorite adds the favorite if absent, removes it if present, and
 // returns whether the store is favorited after the operation.
 func ToggleStoreFavorite(user, favoriteType, storeOwner, storeName string) (bool, error) {

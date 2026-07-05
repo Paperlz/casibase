@@ -528,6 +528,9 @@ func (c *ApiController) AddComment() {
 		c.ResponseError(err.Error())
 		return
 	}
+	if success {
+		notifyCommentWatchers(&comment, username, c.requestOrigin())
+	}
 
 	c.ResponseOk(success)
 }

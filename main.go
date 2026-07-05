@@ -61,6 +61,7 @@ func main() {
 	go object.InitStoreCount()
 	go object.InitCommitRecordsTask()
 	go object.InitMessageTransactionRetry()
+	go object.InitNotificationSender()
 
 	beego.SetStaticPath("/swagger", "swagger")
 	beego.InsertFilter("*", beego.BeforeRouter, routers.CorsFilter)

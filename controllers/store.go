@@ -278,6 +278,12 @@ func (c *ApiController) UpdateStore() {
 		}
 	}
 
+	if success {
+		url := joinNotificationURL(c.requestOrigin(), "agents", store.Owner, store.Name)
+		title := fmt.Sprintf("%s updated agent %s/%s", c.GetSessionUsername(), store.Owner, store.Name)
+		notifyStoreWatchers(store.Owner, store.Name, object.NotificationEventStoreUpdated, c.GetSessionUsername(), title, "", url)
+	}
+
 	c.ResponseOk(success)
 }
 

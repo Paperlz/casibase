@@ -1,0 +1,206 @@
+// Copyright 2026 The OpenAgent Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package object
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/beego/beego/logs"
+	"github.com/the-open-agent/openagent/auth"
+	"github.com/the-open-agent/openagent/conf"
+	"github.com/the-open-agent/openagent/util"
+	"xorm.io/core"
+)
+
+const (
+	NotificationEventStoreUpdated  = "store-updated"
+	NotificationEventIssueCreated  = "issue-created"
+	NotificationEventIssueUpdated  = "issue-updated"
+	NotificationEventCommentAdded  = "comment-added"
+	NotificationStatusPending      = "Pending"
+	NotificationStatusSent         = "Sent"
+	NotificationStatusFailed       = "Failed"
+	notificationRetryLimit         = 5
+	notificationScanBatchSize      = 50
+	notificationScanIntervalSecond = 30
+)
+
+type Notification struct {
+	Owner       string `xorm:"varchar(100) notnull pk" json:"owner"`
+	Name        string `xorm:"varchar(100) notnull pk" json:"name"`
+	CreatedTime string `xorm:"varchar(100) index" json:"createdTime"`
+	UpdatedTime string `xorm:"varchar(100)" json:"updatedTime"`
+
+	Recipient string `xorm:"varchar(100) index" json:"recipient"`
+	Actor     string `xorm:"varchar(100) index" json:"actor"`
+
+	StoreOwner string `xorm:"varchar(100) index(idx_notification_store)" json:"storeOwner"`
+	StoreName  string `xorm:"varchar(100) index(idx_notification_store)" json:"storeName"`
+
+	Event   string `xorm:"varchar(50) index" json:"event"`
+	Title   string `xorm:"varchar(255)" json:"title"`
+	Content string `xorm:"mediumtext" json:"content"`
+	Url     string `xorm:"varchar(500)" json:"url"`
+
+	Status     string `xorm:"varchar(20) index" json:"status"`
+	RetryCount int    `json:"retryCount"`
+	ErrorText  string `xorm:"mediumtext" json:"errorText"`
+	SentTime   string `xorm:"varchar(100)" json:"sentTime"`
+}
+
+func buildNotificationContent(recipient, title, content, url string) string {
+	parts := []string{fmt.Sprintf("[OpenAgent] %s", title)}
+	if recipient != "" {
+		parts = append(parts, fmt.Sprintf("Recipient: %s", recipient))
+	}
+	if strings.TrimSpace(content) != "" {
+		parts = append(parts, strings.TrimSpace(content))
+	}
+	if url != "" {
+		parts = append(parts, url)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func AddStoreNotifications(storeOwner, storeName, event, actor, title, content, url string) error {
+	store, err := getStore(storeOwner, storeName)
+	if err != nil {
+		return err
+	}
+	if store == nil || store.PublishState != "Published" {
+		return nil
+	}
+
+	watchers, err := GetStoreWatchers(storeOwner, storeName)
+	if err != nil {
+		return err
+	}
+	if len(watchers) == 0 {
+		return nil
+	}
+
+	now := util.GetCurrentTimeWithMilli()
+	notifications := make([]*Notification, 0, len(watchers))
+	for _, watcher := range watchers {
+		if watcher.Owner == "" || watcher.Owner == actor {
+			continue
+		}
+		notification := &Notification{
+			Owner:       storeOwner,
+			Name:        util.GetRandomString(24),
+			CreatedTime: now,
+			UpdatedTime: now,
+			Recipient:   watcher.Owner,
+			Actor:       actor,
+			StoreOwner:  storeOwner,
+			StoreName:   storeName,
+			Event:       event,
+			Title:       title,
+			Content:     buildNotificationContent(watcher.Owner, title, content, url),
+			Url:         url,
+			Status:      NotificationStatusPending,
+		}
+		notifications = append(notifications, notification)
+	}
+	if len(notifications) == 0 {
+		return nil
+	}
+
+	_, err = adapter.engine.Insert(notifications)
+	return err
+}
+
+func GetNotificationCount(owner, field, value string) (int64, error) {
+	session := GetDbSession(owner, -1, -1, field, value, "", "")
+	defer session.Close()
+	return session.Count(&Notification{})
+}
+
+func GetPaginationNotifications(owner string, offset, limit int, field, value, sortField, sortOrder string) ([]*Notification, error) {
+	notifications := []*Notification{}
+	session := GetDbSession(owner, offset, limit, field, value, sortField, sortOrder)
+	defer session.Close()
+	err := session.Find(&notifications)
+	return notifications, err
+}
+
+func GetPaginationNotificationsByStoreNames(storeNames []string, offset, limit int, field, value, sortField, sortOrder string) ([]*Notification, error) {
+	notifications := []*Notification{}
+	if len(storeNames) == 0 {
+		return notifications, nil
+	}
+	session := GetDbSession("", offset, limit, field, value, sortField, sortOrder)
+	defer session.Close()
+	err := session.In("store_name", storeNames).Find(&notifications)
+	return notifications, err
+}
+
+func updateNotificationStatus(notification *Notification, status string, err error) error {
+	notification.Status = status
+	notification.UpdatedTime = util.GetCurrentTimeWithMilli()
+	if status == NotificationStatusSent {
+		notification.SentTime = notification.UpdatedTime
+		notification.ErrorText = ""
+	} else if err != nil {
+		notification.RetryCount++
+		notification.ErrorText = err.Error()
+	}
+	_, updateErr := adapter.engine.ID(core.PK{notification.Owner, notification.Name}).
+		Cols("status", "updated_time", "retry_count", "error_text", "sent_time").
+		Update(notification)
+	return updateErr
+}
+
+func ScanPendingNotifications() {
+	if !conf.IsCasdoorAvailable() {
+		return
+	}
+
+	notifications := []*Notification{}
+	err := adapter.engine.Where("status = ? or (status = ? and retry_count < ?)", NotificationStatusPending, NotificationStatusFailed, notificationRetryLimit).
+		Asc("created_time").
+		Limit(notificationScanBatchSize).
+		Find(&notifications)
+	if err != nil {
+		logs.Warning("Failed to scan notifications: %v", err)
+		return
+	}
+
+	for _, notification := range notifications {
+		err = auth.SendNotification(notification.Content)
+		if err != nil {
+			logs.Warning("Failed to send notification %s/%s: %v", notification.Owner, notification.Name, err)
+			if updateErr := updateNotificationStatus(notification, NotificationStatusFailed, err); updateErr != nil {
+				logs.Warning("Failed to update notification %s/%s status: %v", notification.Owner, notification.Name, updateErr)
+			}
+			continue
+		}
+		if updateErr := updateNotificationStatus(notification, NotificationStatusSent, nil); updateErr != nil {
+			logs.Warning("Failed to update notification %s/%s status: %v", notification.Owner, notification.Name, updateErr)
+		}
+	}
+}
+
+func InitNotificationSender() {
+	ScanPendingNotifications()
+	ticker := time.NewTicker(time.Duration(notificationScanIntervalSecond) * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		ScanPendingNotifications()
+	}
+}
