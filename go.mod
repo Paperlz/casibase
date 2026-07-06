@@ -17,7 +17,7 @@ require (
 	github.com/beego/beego v1.12.12
 	github.com/carmel/gooxml v0.0.0-20220216072414-40ff56130850
 	github.com/casbin/casbin/v2 v2.135.0
-	github.com/casdoor/casdoor-go-sdk v1.44.0
+	github.com/casdoor/casdoor-go-sdk v1.47.0
 	github.com/casibase/dashscopego v0.6.0
 	github.com/casibase/go-openrouter v1.0.0
 	github.com/casibase/pdf v1.2.0

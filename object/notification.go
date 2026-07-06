@@ -32,11 +32,13 @@ const (
 	NotificationEventIssueUpdated  = "issue-updated"
 	NotificationEventCommentAdded  = "comment-added"
 	NotificationStatusPending      = "Pending"
+	NotificationStatusSending      = "Sending"
 	NotificationStatusSent         = "Sent"
 	NotificationStatusFailed       = "Failed"
 	notificationRetryLimit         = 5
 	notificationScanBatchSize      = 50
 	notificationScanIntervalSecond = 30
+	notificationSendingStaleMinute = 10
 )
 
 type Notification struct {
@@ -138,15 +140,20 @@ func GetPaginationNotifications(owner string, offset, limit int, field, value, s
 	return notifications, err
 }
 
-func GetPaginationNotificationsByStoreNames(storeNames []string, offset, limit int, field, value, sortField, sortOrder string) ([]*Notification, error) {
-	notifications := []*Notification{}
-	if len(storeNames) == 0 {
-		return notifications, nil
+func claimNotification(notification *Notification) (bool, error) {
+	notification.Status = NotificationStatusSending
+	notification.UpdatedTime = util.GetCurrentTimeWithMilli()
+	staleTime := util.FormatTimeForCompare(time.Now().Add(-time.Duration(notificationSendingStaleMinute) * time.Minute))
+
+	affected, err := adapter.engine.
+		Where("owner = ? AND name = ? AND (status = ? OR (status = ? AND retry_count < ?) OR (status = ? AND updated_time < ?))",
+			notification.Owner, notification.Name, NotificationStatusPending, NotificationStatusFailed, notificationRetryLimit, NotificationStatusSending, staleTime).
+		Cols("status", "updated_time").
+		Update(notification)
+	if err != nil {
+		return false, err
 	}
-	session := GetDbSession("", offset, limit, field, value, sortField, sortOrder)
-	defer session.Close()
-	err := session.In("store_name", storeNames).Find(&notifications)
-	return notifications, err
+	return affected != 0, nil
 }
 
 func updateNotificationStatus(notification *Notification, status string, err error) error {
@@ -159,7 +166,9 @@ func updateNotificationStatus(notification *Notification, status string, err err
 		notification.RetryCount++
 		notification.ErrorText = err.Error()
 	}
+
 	_, updateErr := adapter.engine.ID(core.PK{notification.Owner, notification.Name}).
+		Where("status = ?", NotificationStatusSending).
 		Cols("status", "updated_time", "retry_count", "error_text", "sent_time").
 		Update(notification)
 	return updateErr
@@ -171,7 +180,9 @@ func ScanPendingNotifications() {
 	}
 
 	notifications := []*Notification{}
-	err := adapter.engine.Where("status = ? or (status = ? and retry_count < ?)", NotificationStatusPending, NotificationStatusFailed, notificationRetryLimit).
+	staleTime := util.FormatTimeForCompare(time.Now().Add(-time.Duration(notificationSendingStaleMinute) * time.Minute))
+	err := adapter.engine.Where("status = ? OR (status = ? AND retry_count < ?) OR (status = ? AND updated_time < ?)",
+		NotificationStatusPending, NotificationStatusFailed, notificationRetryLimit, NotificationStatusSending, staleTime).
 		Asc("created_time").
 		Limit(notificationScanBatchSize).
 		Find(&notifications)
@@ -181,7 +192,16 @@ func ScanPendingNotifications() {
 	}
 
 	for _, notification := range notifications {
-		err = auth.SendNotification(notification.Content)
+		claimed, claimErr := claimNotification(notification)
+		if claimErr != nil {
+			logs.Warning("Failed to claim notification %s/%s: %v", notification.Owner, notification.Name, claimErr)
+			continue
+		}
+		if !claimed {
+			continue
+		}
+
+		err = auth.SendNotification(notification.Content, notification.Recipient)
 		if err != nil {
 			logs.Warning("Failed to send notification %s/%s: %v", notification.Owner, notification.Name, err)
 			if updateErr := updateNotificationStatus(notification, NotificationStatusFailed, err); updateErr != nil {
