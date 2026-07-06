@@ -14,7 +14,7 @@
 
 import React, {useEffect, useRef, useState} from "react";
 import {Link, Redirect, Route, Switch, withRouter} from "react-router-dom";
-import {Avatar, Button, Card, Drawer, Dropdown, Layout, Menu, Result} from "antd";
+import {Avatar, Badge, Button, Card, Drawer, Dropdown, Layout, Menu, Result, Tooltip} from "antd";
 import {
   ApartmentOutlined,
   ApiOutlined,
@@ -110,6 +110,8 @@ import SiteEditPage from "./SiteEditPage";
 import CommentListPage from "./CommentListPage";
 import CommentEditPage from "./CommentEditPage";
 import NotificationListPage from "./NotificationListPage";
+import UserNotificationsPage from "./UserNotificationsPage";
+import * as NotificationBackend from "./backend/NotificationBackend";
 const {Header, Footer, Content, Sider} = Layout;
 
 function getMenuParentKey(uri) {
@@ -152,6 +154,7 @@ function persistMenuOpenKeys(keys) {
 function ManagementPage(props) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [siderCollapsed, setSiderCollapsed] = useState(() => localStorage.getItem("siderCollapsed") === "true");
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const siderWasCollapsedRef = useRef(false);
   const [menuOpenKeys, setMenuOpenKeys] = useState(() => {
     if (localStorage.getItem("siderCollapsed") === "true") {
@@ -218,6 +221,19 @@ function ManagementPage(props) {
   const textColor = isDark ? "white" : "black";
   const siderLogo = logo || Setting.getLogo(themeAlgorithm, site?.logoUrl);
   const navbarHtml = Setting.getNavbarHtml(themeAlgorithm, site?.navbarHtml);
+
+  useEffect(() => {
+    if (!account || Setting.isAnonymousUser(account)) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+    NotificationBackend.getUserNotifications(1, 1, "unread")
+      .then((res) => {
+        if (res.status === "ok") {
+          setUnreadNotificationCount(res.data2?.unreadCount || 0);
+        }
+      });
+  }, [account, uri]);
 
   const toggleSider = () => {
     const next = !siderCollapsed;
@@ -359,6 +375,16 @@ function ManagementPage(props) {
           )}
           <ThemeSelect className="select-box" themeAlgorithm={themeAlgorithm} onChange={setLogoAndThemeAlgorithm} />
           <LanguageSelect className="select-box" />
+          <Tooltip title={i18next.t("general:Notifications")}>
+            <Badge count={unreadNotificationCount} size="small" offset={[-2, 4]}>
+              <Button
+                type="text"
+                icon={<InboxOutlined />}
+                onClick={() => history.push("/user-notifications")}
+                style={{width: 36, height: 36}}
+              />
+            </Badge>
+          </Tooltip>
           {renderRightDropdown()}
         </div>
       );
@@ -578,6 +604,7 @@ function ManagementPage(props) {
         <Route exact path="/snapshots" render={(props) => renderSigninIfNotSignedIn(<SnapshotListPage account={account} {...props} />)} />
         <Route exact path="/records" render={(props) => renderSigninIfNotSignedIn(<RecordListPage account={account} {...props} />)} />
         <Route exact path="/notifications" render={(props) => renderSigninIfNotSignedIn(<NotificationListPage account={account} {...props} />)} />
+        <Route exact path="/user-notifications" render={(props) => renderSigninIfNotSignedIn(<UserNotificationsPage account={account} onUnreadCountChange={setUnreadNotificationCount} {...props} />)} />
         <Route exact path="/records/:organizationName/:recordName" render={(props) => renderSigninIfNotSignedIn(<RecordEditPage account={account} {...props} />)} />
         <Route exact path="/tasks" render={(props) => renderSigninIfNotSignedIn(<TaskListPage account={account} {...props} />)} />
         <Route exact path="/tasks/:owner/:taskName" render={(props) => renderSigninIfNotSignedIn(<TaskEditPage account={account} {...props} />)} />

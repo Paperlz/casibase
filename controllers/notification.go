@@ -15,10 +15,17 @@
 package controllers
 
 import (
+	"encoding/json"
+
 	"github.com/beego/beego/utils/pagination"
 	"github.com/the-open-agent/openagent/object"
 	"github.com/the-open-agent/openagent/util"
 )
+
+type markNotificationReadForm struct {
+	Owner string `json:"owner"`
+	Name  string `json:"name"`
+}
 
 // GetNotifications
 // @Title GetNotifications
@@ -88,4 +95,126 @@ func (c *ApiController) GetNotifications() {
 		return
 	}
 	c.ResponseOk(notifications, paginator.Nums())
+}
+
+// GetUserNotifications
+// @Title GetUserNotifications
+// @Tag Notification API
+// @Description get notification inbox for current user
+// @Param p query string false "The page number"
+// @Param pageSize query string false "The page size"
+// @Param readStatus query string false "all, unread or read"
+// @Success 200 {array} object.Notification The Response object
+// @router /get-user-notifications [get]
+func (c *ApiController) GetUserNotifications() {
+	username, ok := c.RequireSignedIn()
+	if !ok {
+		return
+	}
+	if util.IsAnonymousUserByUsername(username) {
+		c.ResponseError(c.T("auth:Please sign in first"))
+		return
+	}
+
+	limit := c.Input().Get("pageSize")
+	page := c.Input().Get("p")
+	readStatus := c.Input().Get("readStatus")
+	if readStatus == "" {
+		readStatus = "all"
+	}
+	if readStatus != "all" && readStatus != "unread" && readStatus != "read" {
+		c.ResponseError("invalid readStatus")
+		return
+	}
+	if limit == "" || page == "" {
+		limit = "10"
+		page = "1"
+	}
+
+	limitInt, err := util.ParseIntWithError(limit)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	count, err := object.GetUserNotificationCount(username, readStatus)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	unreadCount, err := object.GetUserUnreadNotificationCount(username)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	paginator := pagination.SetPaginator(c.Ctx, limitInt, count)
+	notifications, err := object.GetPaginationUserNotifications(username, paginator.Offset(), limitInt, readStatus)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(notifications, map[string]int64{
+		"total":       count,
+		"unreadCount": unreadCount,
+	})
+}
+
+// MarkNotificationRead
+// @Title MarkNotificationRead
+// @Tag Notification API
+// @Description mark current user's notification as read
+// @Param body body controllers.markNotificationReadForm true "The notification id"
+// @Success 200 {object} controllers.Response The Response object
+// @router /mark-notification-read [post]
+func (c *ApiController) MarkNotificationRead() {
+	username, ok := c.RequireSignedIn()
+	if !ok {
+		return
+	}
+	if util.IsAnonymousUserByUsername(username) {
+		c.ResponseError(c.T("auth:Please sign in first"))
+		return
+	}
+
+	var form markNotificationReadForm
+	err := json.Unmarshal(c.Ctx.Input.RequestBody, &form)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if form.Owner == "" || form.Name == "" {
+		c.ResponseError("owner and name are required")
+		return
+	}
+
+	success, err := object.MarkNotificationRead(form.Owner, form.Name, username)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(success)
+}
+
+// MarkAllNotificationsRead
+// @Title MarkAllNotificationsRead
+// @Tag Notification API
+// @Description mark all current user's notifications as read
+// @Success 200 {object} controllers.Response The Response object
+// @router /mark-all-notifications-read [post]
+func (c *ApiController) MarkAllNotificationsRead() {
+	username, ok := c.RequireSignedIn()
+	if !ok {
+		return
+	}
+	if util.IsAnonymousUserByUsername(username) {
+		c.ResponseError(c.T("auth:Please sign in first"))
+		return
+	}
+
+	affected, err := object.MarkAllNotificationsRead(username)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(affected)
 }

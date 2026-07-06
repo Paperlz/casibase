@@ -221,19 +221,21 @@ class StoreHubPage extends React.Component {
       {value: "topic", label: i18next.t("store:Topic")},
     ];
 
+    const viewSwitcher = this.isSignedIn() ? (
+      <Segmented
+        value={this.state.view}
+        onChange={(v) => this.handleViewChange(v)}
+        options={[
+          {value: "all", label: i18next.t("store:All agents")},
+          {value: "star", label: i18next.t("store:Starred")},
+          {value: "watch", label: i18next.t("store:Watching")},
+        ]}
+      />
+    ) : null;
+
     return (
       <div style={{marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center"}}>
-        {this.isSignedIn() ? (
-          <Segmented
-            value={this.state.view}
-            onChange={(v) => this.handleViewChange(v)}
-            options={[
-              {value: "all", label: i18next.t("store:All agents")},
-              {value: "star", label: i18next.t("store:Starred")},
-              {value: "watch", label: i18next.t("store:Watching")},
-            ]}
-          />
-        ) : null}
+        {viewSwitcher}
         <Input.Search
           placeholder={i18next.t("store:Please search here")}
           value={searchText}

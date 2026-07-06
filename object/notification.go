@@ -24,6 +24,7 @@ import (
 	"github.com/the-open-agent/openagent/conf"
 	"github.com/the-open-agent/openagent/util"
 	"xorm.io/core"
+	"xorm.io/xorm"
 )
 
 const (
@@ -62,6 +63,7 @@ type Notification struct {
 	RetryCount int    `json:"retryCount"`
 	ErrorText  string `xorm:"mediumtext" json:"errorText"`
 	SentTime   string `xorm:"varchar(100)" json:"sentTime"`
+	IsRead     bool   `xorm:"index" json:"isRead"`
 }
 
 func buildNotificationContent(recipient, title, content, url string) string {
@@ -138,6 +140,59 @@ func GetPaginationNotifications(owner string, offset, limit int, field, value, s
 	defer session.Close()
 	err := session.Find(&notifications)
 	return notifications, err
+}
+
+func applyUserNotificationFilter(session *xorm.Session, recipient string, readStatus string) *xorm.Session {
+	session = session.Where("recipient = ?", recipient)
+	if readStatus == "read" {
+		session = session.And("is_read = ?", true)
+	} else if readStatus == "unread" {
+		session = session.And("(is_read = ? OR is_read IS NULL)", false)
+	}
+	return session
+}
+
+func GetUserNotificationCount(recipient string, readStatus string) (int64, error) {
+	session := adapter.engine.NewSession()
+	defer session.Close()
+	session = applyUserNotificationFilter(session, recipient, readStatus)
+	return session.Count(&Notification{})
+}
+
+func GetUserUnreadNotificationCount(recipient string) (int64, error) {
+	return GetUserNotificationCount(recipient, "unread")
+}
+
+func GetPaginationUserNotifications(recipient string, offset, limit int, readStatus string) ([]*Notification, error) {
+	notifications := []*Notification{}
+	session := adapter.engine.NewSession()
+	defer session.Close()
+	session = applyUserNotificationFilter(session, recipient, readStatus)
+	err := session.Desc("created_time").Limit(limit, offset).Find(&notifications)
+	return notifications, err
+}
+
+func MarkNotificationRead(owner, name, recipient string) (bool, error) {
+	notification := &Notification{
+		IsRead:      true,
+		UpdatedTime: util.GetCurrentTimeWithMilli(),
+	}
+	affected, err := adapter.engine.
+		Where("owner = ? AND name = ? AND recipient = ?", owner, name, recipient).
+		Cols("is_read", "updated_time").
+		Update(notification)
+	return affected != 0, err
+}
+
+func MarkAllNotificationsRead(recipient string) (int64, error) {
+	notification := &Notification{
+		IsRead:      true,
+		UpdatedTime: util.GetCurrentTimeWithMilli(),
+	}
+	return adapter.engine.
+		Where("recipient = ? AND (is_read = ? OR is_read IS NULL)", recipient, false).
+		Cols("is_read", "updated_time").
+		Update(notification)
 }
 
 func claimNotification(notification *Notification) (bool, error) {

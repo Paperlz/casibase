@@ -97,6 +97,9 @@ func initAPI() {
 	beego.Router("/api/get-store-forks", &controllers.ApiController{}, "GET:GetStoreForks")
 
 	beego.Router("/api/get-notifications", &controllers.ApiController{}, "GET:GetNotifications")
+	beego.Router("/api/get-user-notifications", &controllers.ApiController{}, "GET:GetUserNotifications")
+	beego.Router("/api/mark-notification-read", &controllers.ApiController{}, "POST:MarkNotificationRead")
+	beego.Router("/api/mark-all-notifications-read", &controllers.ApiController{}, "POST:MarkAllNotificationsRead")
 
 	beego.Router("/api/get-global-providers", &controllers.ApiController{}, "GET:GetGlobalProviders")
 	beego.Router("/api/get-providers", &controllers.ApiController{}, "GET:GetProviders")

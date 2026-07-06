@@ -23,3 +23,35 @@ export function getNotifications(page = "", pageSize = "", field = "", value = "
     },
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function getUserNotifications(page = "", pageSize = "", readStatus = "all") {
+  return fetch(`${Setting.ServerUrl}/api/get-user-notifications?p=${page}&pageSize=${pageSize}&readStatus=${readStatus}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function markNotificationRead(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/mark-notification-read`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({owner, name}),
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function markAllNotificationsRead() {
+  return fetch(`${Setting.ServerUrl}/api/mark-all-notifications-read`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
