@@ -114,7 +114,7 @@ func AddStoreNotifications(storeOwner, storeName, event, actor, title, content, 
 			StoreName:   storeName,
 			Event:       event,
 			Title:       title,
-			Content:     buildNotificationContent(watcher.Owner, title, content, url),
+			Content:     strings.TrimSpace(content),
 			Url:         url,
 			Status:      NotificationStatusPending,
 		}
@@ -256,7 +256,7 @@ func ScanPendingNotifications() {
 			continue
 		}
 
-		err = auth.SendNotification(notification.Content, notification.Recipient)
+		err = auth.SendNotification(buildNotificationContent(notification.Recipient, notification.Title, notification.Content, notification.Url), notification.Recipient)
 		if err != nil {
 			logs.Warning("Failed to send notification %s/%s: %v", notification.Owner, notification.Name, err)
 			if updateErr := updateNotificationStatus(notification, NotificationStatusFailed, err); updateErr != nil {

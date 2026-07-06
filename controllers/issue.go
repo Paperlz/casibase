@@ -165,7 +165,7 @@ func (c *ApiController) AddIssue() {
 			c.ResponseError(err.Error())
 			return
 		}
-		url := joinNotificationURL(c.requestOrigin(), "agents", storeOwner, storeName, "issues", issue.Owner, issue.Name)
+		url := joinNotificationURL("agents", storeOwner, storeName, "issues", issue.Owner, issue.Name)
 		notifyIssueWatchers(&issue, object.NotificationEventIssueCreated, username, "created", url)
 	}
 	c.ResponseOk(success)
@@ -249,7 +249,7 @@ func (c *ApiController) UpdateIssue() {
 			c.ResponseError(err.Error())
 			return
 		}
-		url := joinNotificationURL(c.requestOrigin(), "agents", storeOwner, storeName, "issues", issue.Owner, issue.Name)
+		url := joinNotificationURL("agents", storeOwner, storeName, "issues", issue.Owner, issue.Name)
 		notifyIssueWatchers(&issue, object.NotificationEventIssueUpdated, username, "updated", url)
 	}
 	c.ResponseOk(success)

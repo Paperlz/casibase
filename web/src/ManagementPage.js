@@ -376,12 +376,12 @@ function ManagementPage(props) {
           <ThemeSelect className="select-box" themeAlgorithm={themeAlgorithm} onChange={setLogoAndThemeAlgorithm} />
           <LanguageSelect className="select-box" />
           <Tooltip title={i18next.t("general:Notifications")}>
-            <Badge count={unreadNotificationCount} size="small" offset={[-2, 4]}>
+            <Badge count={unreadNotificationCount} size="small" offset={[-4, 5]}>
               <Button
                 type="text"
-                icon={<InboxOutlined />}
+                icon={<InboxOutlined style={{fontSize: 20}} />}
                 onClick={() => history.push("/user-notifications")}
-                style={{width: 36, height: 36}}
+                style={{width: 40, height: 40}}
               />
             </Badge>
           </Tooltip>

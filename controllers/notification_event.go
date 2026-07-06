@@ -25,18 +25,8 @@ import (
 	"golang.org/x/net/html"
 )
 
-func (c *ApiController) requestOrigin() string {
-	scheme := "http"
-	if c.Ctx.Request.TLS != nil {
-		scheme = "https"
-	} else if value := c.Ctx.Request.Header.Get("X-Forwarded-Proto"); value != "" {
-		scheme = strings.Split(value, ",")[0]
-	}
-	return fmt.Sprintf("%s://%s", strings.TrimSpace(scheme), c.Ctx.Request.Host)
-}
-
-func joinNotificationURL(origin string, parts ...string) string {
-	res, err := url.JoinPath(origin, parts...)
+func joinNotificationURL(parts ...string) string {
+	res, err := url.JoinPath("/", parts...)
 	if err != nil {
 		return ""
 	}
@@ -116,7 +106,7 @@ func notifyIssueWatchers(issue *object.Issue, event, actor, action, url string) 
 	notifyStoreWatchers(storeOwner, storeName, event, actor, title, content, url)
 }
 
-func notifyCommentWatchers(comment *object.Comment, actor, origin string) {
+func notifyCommentWatchers(comment *object.Comment, actor string) {
 	if comment == nil {
 		return
 	}
@@ -129,7 +119,7 @@ func notifyCommentWatchers(comment *object.Comment, actor, origin string) {
 			return
 		}
 		title := fmt.Sprintf("%s commented on agent %s/%s", actor, storeOwner, storeName)
-		url := joinNotificationURL(origin, "agents", storeOwner, storeName) + getCommentAnchor(comment)
+		url := joinNotificationURL("agents", storeOwner, storeName) + getCommentAnchor(comment)
 		notifyStoreWatchers(storeOwner, storeName, object.NotificationEventCommentAdded, actor, title, content, url)
 	case object.CommentTargetTypeIssue:
 		issueOwner, issueName, err := util.GetOwnerAndNameFromIdWithError(comment.TargetKey)
@@ -151,7 +141,7 @@ func notifyCommentWatchers(comment *object.Comment, actor, origin string) {
 			return
 		}
 		title := fmt.Sprintf("%s commented on issue \"%s\"", actor, issue.Title)
-		url := joinNotificationURL(origin, "agents", storeOwner, storeName, "issues", issue.Owner, issue.Name) + getCommentAnchor(comment)
+		url := joinNotificationURL("agents", storeOwner, storeName, "issues", issue.Owner, issue.Name) + getCommentAnchor(comment)
 		notifyStoreWatchers(storeOwner, storeName, object.NotificationEventCommentAdded, actor, title, content, url)
 	}
 }

@@ -529,7 +529,7 @@ func (c *ApiController) AddComment() {
 		return
 	}
 	if success {
-		notifyCommentWatchers(&comment, username, c.requestOrigin())
+		notifyCommentWatchers(&comment, username)
 	}
 
 	c.ResponseOk(success)

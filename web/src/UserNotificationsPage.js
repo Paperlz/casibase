@@ -42,19 +42,6 @@ function getReason(event) {
   return i18next.t("general:Watching");
 }
 
-function getPreview(notification) {
-  const content = notification.content || "";
-  const lines = content.split("\n")
-    .map(line => line.trim())
-    .filter(line =>
-      line &&
-      !line.startsWith("[OpenAgent]") &&
-      !line.startsWith("Recipient:") &&
-      line !== notification.url
-    );
-  return lines.join(" ");
-}
-
 class UserNotificationsPage extends React.Component {
   constructor(props) {
     super(props);
@@ -121,21 +108,9 @@ class UserNotificationsPage extends React.Component {
     this.markRead(notification, () => {
       if (url.startsWith("/")) {
         this.props.history.push(url);
-        return;
+      } else {
+        window.location.href = url;
       }
-
-      try {
-        const parsedUrl = new URL(url);
-        const appPath = `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
-        if (parsedUrl.origin === window.location.origin || parsedUrl.pathname.startsWith("/agents/")) {
-          this.props.history.push(appPath);
-          return;
-        }
-      } catch {
-        // fall through to normal navigation
-      }
-
-      window.location.href = url;
     }, false);
   }
 
@@ -156,7 +131,6 @@ class UserNotificationsPage extends React.Component {
   }
 
   renderNotification(notification) {
-    const preview = getPreview(notification);
     const agent = `${notification.storeOwner}/${notification.storeName}`;
     return (
       <List.Item
@@ -194,9 +168,9 @@ class UserNotificationsPage extends React.Component {
             >
               {notification.title || notification.event}
             </Paragraph>
-            {preview ? (
+            {notification.content ? (
               <Paragraph ellipsis={{rows: 1}} style={{margin: "2px 0 0", color: "var(--ant-color-text-secondary)"}}>
-                {preview}
+                {notification.content}
               </Paragraph>
             ) : null}
           </div>
