@@ -147,7 +147,7 @@ func applyUserNotificationFilter(session *xorm.Session, recipient string, readSt
 	if readStatus == "read" {
 		session = session.And("is_read = ?", true)
 	} else if readStatus == "unread" {
-		session = session.And("(is_read = ? OR is_read IS NULL)", false)
+		session = session.And("is_read = ?", false)
 	}
 	return session
 }
@@ -190,7 +190,7 @@ func MarkAllNotificationsRead(recipient string) (int64, error) {
 		UpdatedTime: util.GetCurrentTimeWithMilli(),
 	}
 	return adapter.engine.
-		Where("recipient = ? AND (is_read = ? OR is_read IS NULL)", recipient, false).
+		Where("recipient = ? AND is_read = ?", recipient, false).
 		Cols("is_read", "updated_time").
 		Update(notification)
 }

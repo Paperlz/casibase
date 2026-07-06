@@ -119,13 +119,23 @@ class UserNotificationsPage extends React.Component {
   openNotification(notification) {
     const url = notification.url || `/agents/${notification.storeOwner}/${notification.storeName}`;
     this.markRead(notification, () => {
-      if (url.startsWith(window.location.origin)) {
-        this.props.history.push(url.replace(window.location.origin, ""));
-      } else if (url.startsWith("/")) {
+      if (url.startsWith("/")) {
         this.props.history.push(url);
-      } else {
-        window.location.href = url;
+        return;
       }
+
+      try {
+        const parsedUrl = new URL(url);
+        const appPath = `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+        if (parsedUrl.origin === window.location.origin || parsedUrl.pathname.startsWith("/agents/")) {
+          this.props.history.push(appPath);
+          return;
+        }
+      } catch {
+        // fall through to normal navigation
+      }
+
+      window.location.href = url;
     }, false);
   }
 

@@ -32,6 +32,10 @@ function getCommentId(comment) {
   return `${comment.owner}/${comment.name}`;
 }
 
+function getCommentAnchorId(comment) {
+  return `comment-${comment.owner}-${comment.name}`;
+}
+
 function getCommentTime(time) {
   const formattedTime = Setting.getFormattedDate(time);
   if (!formattedTime) {
@@ -155,13 +159,23 @@ function ReplyItem({
   onSubmitEdit,
   onCancelEdit,
   onDelete,
+  highlightedCommentId,
 }) {
   const replyId = getCommentId(reply);
   const isReplying = replyTo === replyId;
   const isEditing = editingCommentId === replyId;
+  const isHighlighted = highlightedCommentId === getCommentAnchorId(reply);
 
   return (
-    <div style={{padding: "10px 0", borderBottom: "1px solid var(--ant-color-border-secondary)"}}>
+    <div
+      id={getCommentAnchorId(reply)}
+      style={{
+        padding: "10px 0",
+        borderBottom: "1px solid var(--ant-color-border-secondary)",
+        background: isHighlighted ? "var(--ant-color-fill-secondary)" : "transparent",
+        transition: "background 0.3s",
+      }}
+    >
       <div style={{display: "flex", gap: 10, alignItems: "flex-start"}}>
         <UserLabel user={reply.owner} account={account} size={28} avatarOnly />
         <div style={{flex: 1, minWidth: 0}}>
@@ -227,14 +241,24 @@ function RootCommentItem({
   onSubmitEdit,
   onCancelEdit,
   onDelete,
+  highlightedCommentId,
 }) {
   const commentId = getCommentId(comment);
   const isReplying = replyTo === commentId;
   const isEditing = editingCommentId === commentId;
+  const isHighlighted = highlightedCommentId === getCommentAnchorId(comment);
   const replyMap = new Map((comment.replies || []).map(reply => [getCommentId(reply), reply]));
 
   return (
-    <div style={{padding: "14px 0", borderBottom: "1px solid var(--ant-color-border-secondary)"}}>
+    <div
+      id={getCommentAnchorId(comment)}
+      style={{
+        padding: "14px 0",
+        borderBottom: "1px solid var(--ant-color-border-secondary)",
+        background: isHighlighted ? "var(--ant-color-fill-secondary)" : "transparent",
+        transition: "background 0.3s",
+      }}
+    >
       <div style={{display: "flex", gap: 12, alignItems: "flex-start"}}>
         <UserLabel user={comment.owner} account={account} size={32} avatarOnly />
         <div style={{flex: 1, minWidth: 0}}>
@@ -298,6 +322,7 @@ function RootCommentItem({
                   onSubmitEdit={onSubmitEdit}
                   onCancelEdit={onCancelEdit}
                   onDelete={onDelete}
+                  highlightedCommentId={highlightedCommentId}
                 />
               ))}
             </div>
@@ -324,6 +349,7 @@ function CommentArea({account, targetType, targetKey, targetOwner, disabled = fa
   const [editingCommentId, setEditingCommentId] = useState("");
   const [editingValue, setEditingValue] = useState("");
   const [editingSubmitting, setEditingSubmitting] = useState(false);
+  const [highlightedCommentId, setHighlightedCommentId] = useState("");
   const canComment = account && !Setting.isAnonymousUser(account);
 
   const loadComments = useCallback((nextPage) => {
@@ -355,6 +381,21 @@ function CommentArea({account, targetType, targetKey, targetOwner, disabled = fa
     setEditingValue("");
     loadComments(1);
   }, [loadComments]);
+
+  useEffect(() => {
+    if (loading || comments.length === 0 || !window.location.hash.startsWith("#comment-")) {
+      return undefined;
+    }
+    const anchorId = decodeURIComponent(window.location.hash.slice(1));
+    const element = document.getElementById(anchorId);
+    if (!element) {
+      return undefined;
+    }
+    element.scrollIntoView({behavior: "smooth", block: "center"});
+    setHighlightedCommentId(anchorId);
+    const timer = window.setTimeout(() => setHighlightedCommentId(""), 2400);
+    return () => window.clearTimeout(timer);
+  }, [comments, loading]);
 
   const uploadImage = file => {
     return ResourceBackend.uploadResource(account?.name || "", "chat", "comment", targetKey, file);
@@ -527,6 +568,7 @@ function CommentArea({account, targetType, targetKey, targetOwner, disabled = fa
                 onSubmitEdit={submitEdit}
                 onCancelEdit={closeEdit}
                 onDelete={deleteComment}
+                highlightedCommentId={highlightedCommentId}
               />
             )}
           />

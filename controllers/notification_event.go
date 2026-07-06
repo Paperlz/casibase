@@ -43,6 +43,13 @@ func joinNotificationURL(origin string, parts ...string) string {
 	return res
 }
 
+func getCommentAnchor(comment *object.Comment) string {
+	if comment == nil || comment.Owner == "" || comment.Name == "" {
+		return ""
+	}
+	return fmt.Sprintf("#comment-%s-%s", url.PathEscape(comment.Owner), url.PathEscape(comment.Name))
+}
+
 func plainNotificationText(content string) string {
 	content = strings.TrimSpace(content)
 	if content == "" {
@@ -122,7 +129,7 @@ func notifyCommentWatchers(comment *object.Comment, actor, origin string) {
 			return
 		}
 		title := fmt.Sprintf("%s commented on agent %s/%s", actor, storeOwner, storeName)
-		url := joinNotificationURL(origin, "agents", storeOwner, storeName)
+		url := joinNotificationURL(origin, "agents", storeOwner, storeName) + getCommentAnchor(comment)
 		notifyStoreWatchers(storeOwner, storeName, object.NotificationEventCommentAdded, actor, title, content, url)
 	case object.CommentTargetTypeIssue:
 		issueOwner, issueName, err := util.GetOwnerAndNameFromIdWithError(comment.TargetKey)
@@ -144,7 +151,7 @@ func notifyCommentWatchers(comment *object.Comment, actor, origin string) {
 			return
 		}
 		title := fmt.Sprintf("%s commented on issue \"%s\"", actor, issue.Title)
-		url := joinNotificationURL(origin, "agents", storeOwner, storeName, "issues", issue.Owner, issue.Name)
+		url := joinNotificationURL(origin, "agents", storeOwner, storeName, "issues", issue.Owner, issue.Name) + getCommentAnchor(comment)
 		notifyStoreWatchers(storeOwner, storeName, object.NotificationEventCommentAdded, actor, title, content, url)
 	}
 }
