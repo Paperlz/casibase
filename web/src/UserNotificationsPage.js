@@ -39,7 +39,7 @@ function getReason(event) {
   if (event === "issue-created" || event === "issue-updated") {
     return i18next.t("general:Subscribed");
   }
-  return i18next.t("general:Watching");
+  return i18next.t("store:Watching");
 }
 
 class UserNotificationsPage extends React.Component {
@@ -195,9 +195,9 @@ class UserNotificationsPage extends React.Component {
             value={readStatus}
             onChange={(value) => this.fetchNotifications(1, value)}
             options={[
-              {value: "all", label: i18next.t("general:All")},
+              {value: "all", label: i18next.t("store:All")},
               {value: "unread", label: `${i18next.t("general:Unread")} ${unreadCount}`},
-              {value: "read", label: i18next.t("general:Read")},
+              {value: "read", label: i18next.t("store:Read")},
             ]}
           />
           <Button icon={<CheckCircleOutlined />} loading={markingAll} disabled={unreadCount === 0} onClick={() => this.markAllRead()}>
