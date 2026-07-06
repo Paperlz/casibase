@@ -25,6 +25,7 @@ const {Paragraph} = Typography;
 function getStatusTag(status) {
   const colors = {
     "Pending": "processing",
+    "Sending": "warning",
     "Sent": "success",
     "Failed": "error",
   };

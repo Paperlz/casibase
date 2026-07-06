@@ -28,18 +28,20 @@ import (
 )
 
 const (
-	NotificationEventStoreUpdated  = "store-updated"
-	NotificationEventIssueCreated  = "issue-created"
-	NotificationEventIssueUpdated  = "issue-updated"
-	NotificationEventCommentAdded  = "comment-added"
-	NotificationStatusPending      = "Pending"
-	NotificationStatusSending      = "Sending"
-	NotificationStatusSent         = "Sent"
-	NotificationStatusFailed       = "Failed"
-	notificationRetryLimit         = 5
-	notificationScanBatchSize      = 50
-	notificationScanIntervalSecond = 30
-	notificationSendingStaleMinute = 10
+	NotificationEventStoreUpdated   = "store-updated"
+	NotificationEventIssueCreated   = "issue-created"
+	NotificationEventIssueUpdated   = "issue-updated"
+	NotificationEventCommentAdded   = "comment-added"
+	NotificationStatusPending       = "Pending"
+	NotificationStatusSending       = "Sending"
+	NotificationStatusSent          = "Sent"
+	NotificationStatusFailed        = "Failed"
+	notificationRetryLimit          = 5
+	notificationScanBatchSize       = 50
+	notificationScanIntervalSecond  = 30
+	notificationSendingStaleMinute  = 10
+	notificationRetentionDay        = 90
+	notificationCleanupIntervalHour = 24
 )
 
 type Notification struct {
@@ -270,12 +272,34 @@ func ScanPendingNotifications() {
 	}
 }
 
+func CleanupOldNotifications() {
+	cutoff := util.FormatTimeForCompare(time.Now().AddDate(0, 0, -notificationRetentionDay))
+	affected, err := adapter.engine.
+		Where("created_time < ?", cutoff).
+		Delete(&Notification{})
+	if err != nil {
+		logs.Warning("Failed to cleanup old notifications before %s: %v", cutoff, err)
+		return
+	}
+	if affected > 0 {
+		logs.Info("Cleaned up %d notifications before %s", affected, cutoff)
+	}
+}
+
 func InitNotificationSender() {
 	ScanPendingNotifications()
-	ticker := time.NewTicker(time.Duration(notificationScanIntervalSecond) * time.Second)
-	defer ticker.Stop()
+	CleanupOldNotifications()
+	scanTicker := time.NewTicker(time.Duration(notificationScanIntervalSecond) * time.Second)
+	defer scanTicker.Stop()
+	cleanupTicker := time.NewTicker(time.Duration(notificationCleanupIntervalHour) * time.Hour)
+	defer cleanupTicker.Stop()
 
-	for range ticker.C {
-		ScanPendingNotifications()
+	for {
+		select {
+		case <-scanTicker.C:
+			ScanPendingNotifications()
+		case <-cleanupTicker.C:
+			CleanupOldNotifications()
+		}
 	}
 }

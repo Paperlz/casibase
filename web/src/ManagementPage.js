@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, {useEffect, useRef, useState} from "react";
+import React, {useCallback, useEffect, useRef, useState} from "react";
 import {Link, Redirect, Route, Switch, withRouter} from "react-router-dom";
 import {Avatar, Badge, Button, Card, Drawer, Dropdown, Layout, Menu, Result, Tooltip} from "antd";
 import {
@@ -222,7 +222,7 @@ function ManagementPage(props) {
   const siderLogo = logo || Setting.getLogo(themeAlgorithm, site?.logoUrl);
   const navbarHtml = Setting.getNavbarHtml(themeAlgorithm, site?.navbarHtml);
 
-  useEffect(() => {
+  const refreshUnreadNotificationCount = useCallback(() => {
     if (!account || Setting.isAnonymousUser(account)) {
       setUnreadNotificationCount(0);
       return;
@@ -233,7 +233,16 @@ function ManagementPage(props) {
           setUnreadNotificationCount(res.data2?.unreadCount || 0);
         }
       });
-  }, [account, uri]);
+  }, [account]);
+
+  useEffect(() => {
+    refreshUnreadNotificationCount();
+    if (!account || Setting.isAnonymousUser(account)) {
+      return undefined;
+    }
+    const timer = window.setInterval(refreshUnreadNotificationCount, 30000);
+    return () => window.clearInterval(timer);
+  }, [account, uri, refreshUnreadNotificationCount]);
 
   const toggleSider = () => {
     const next = !siderCollapsed;

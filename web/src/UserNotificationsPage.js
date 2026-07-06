@@ -32,16 +32,6 @@ function getEventIcon(event) {
   return <RobotOutlined />;
 }
 
-function getReason(event) {
-  if (event === "comment-added") {
-    return i18next.t("general:Subscribed");
-  }
-  if (event === "issue-created" || event === "issue-updated") {
-    return i18next.t("general:Subscribed");
-  }
-  return i18next.t("store:Watching");
-}
-
 class UserNotificationsPage extends React.Component {
   constructor(props) {
     super(props);
@@ -174,7 +164,7 @@ class UserNotificationsPage extends React.Component {
               </Paragraph>
             ) : null}
           </div>
-          <Text type="secondary" style={{whiteSpace: "nowrap", fontSize: 12}}>{getReason(notification.event)}</Text>
+          <Text type="secondary" style={{whiteSpace: "nowrap", fontSize: 12}}>{i18next.t("general:Subscribed")}</Text>
           <Text type="secondary" style={{whiteSpace: "nowrap", fontSize: 12}}>{Setting.getFormattedDate(notification.createdTime)}</Text>
         </div>
       </List.Item>
