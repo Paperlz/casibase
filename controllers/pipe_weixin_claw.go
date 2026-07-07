@@ -29,7 +29,9 @@ import (
 
 const (
 	weixinClawRuntimeBufPrefix          = "getUpdatesBuf"
+	weixinClawRuntimeBaseURL            = "baseUrl"
 	weixinClawRuntimeContextTokenPrefix = "contextToken:"
+	weixinClawRuntimeIlinkUserID        = "ilinkUserId"
 	weixinClawRuntimeLastError          = "lastError"
 	weixinClawDefaultPollTimeoutMs      = 35000
 )
@@ -86,7 +88,8 @@ func startWeixinClawMonitorIfNeeded(pipeObj *object.Pipe) {
 }
 
 func runWeixinClawMonitor(ctx context.Context, pipeObj *object.Pipe) {
-	client := pipepkg.NewWeixinClawClient(pipeObj.SecretKey, pipeObj.Token, proxy.ProxyHttpClient)
+	baseURL, _ := getWeixinClawBaseURL(pipeObj)
+	client := pipepkg.NewWeixinClawClient(baseURL, pipeObj.Token, proxy.ProxyHttpClient)
 	buf, _ := object.GetPipeRuntimeValue(pipeObj.Owner, pipeObj.Name, weixinClawRuntimeBufPrefix)
 
 	for ctx.Err() == nil {
@@ -96,12 +99,16 @@ func runWeixinClawMonitor(ctx context.Context, pipeObj *object.Pipe) {
 				return
 			}
 			setWeixinClawLastError(pipeObj, err)
-			time.Sleep(2 * time.Second)
+			if !sleepWeixinClawRetry(ctx) {
+				return
+			}
 			continue
 		}
 		if resp.Ret != 0 || resp.ErrCode != 0 {
 			setWeixinClawLastError(pipeObj, fmt.Errorf("getupdates error: ret=%d errcode=%d errmsg=%s", resp.Ret, resp.ErrCode, resp.ErrMsg))
-			time.Sleep(2 * time.Second)
+			if !sleepWeixinClawRetry(ctx) {
+				return
+			}
 			continue
 		}
 		if resp.GetUpdatesBuf != "" && resp.GetUpdatesBuf != buf {
@@ -122,7 +129,12 @@ func handleWeixinClawMessage(pipeObj *object.Pipe, msg *pipepkg.WeixinClawMessag
 	if msg.ContextToken != "" {
 		_ = object.SetPipeRuntimeValue(pipeObj.Owner, pipeObj.Name, weixinClawRuntimeContextTokenPrefix+msg.FromUserId, msg.ContextToken)
 	}
-	provider, err := pipeObj.GetProvider("")
+	baseURL, err := getWeixinClawBaseURL(pipeObj)
+	if err != nil {
+		setWeixinClawLastError(pipeObj, err)
+		return
+	}
+	provider, err := pipepkg.NewWeixinClawPipe(baseURL, pipeObj.Token, proxy.ProxyHttpClient)
 	if err != nil {
 		setWeixinClawLastError(pipeObj, err)
 		return
@@ -148,6 +160,24 @@ func setWeixinClawLastError(pipeObj *object.Pipe, err error) {
 	_ = object.SetPipeRuntimeValue(pipeObj.Owner, pipeObj.Name, weixinClawRuntimeLastError, err.Error())
 }
 
+func sleepWeixinClawRetry(ctx context.Context) bool {
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func getWeixinClawBaseURL(pipeObj *object.Pipe) (string, error) {
+	if pipeObj == nil {
+		return "", nil
+	}
+	return object.GetPipeRuntimeValue(pipeObj.Owner, pipeObj.Name, weixinClawRuntimeBaseURL)
+}
+
 func (c *ApiController) StartWeixinClawLogin() {
 	id := c.Input().Get("id")
 	pipeObj, err := object.GetPipe(id)
@@ -159,7 +189,12 @@ func (c *ApiController) StartWeixinClawLogin() {
 		c.ResponseError("pipe not found")
 		return
 	}
-	client := pipepkg.NewWeixinClawClient(pipeObj.SecretKey, "", proxy.ProxyHttpClient)
+	baseURL, err := getWeixinClawBaseURL(pipeObj)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	client := pipepkg.NewWeixinClawClient(baseURL, "", proxy.ProxyHttpClient)
 	resp, err := client.StartQRCodeLogin()
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -180,7 +215,12 @@ func (c *ApiController) WaitWeixinClawLogin() {
 		c.ResponseError("pipe not found")
 		return
 	}
-	client := pipepkg.NewWeixinClawClient(pipeObj.SecretKey, "", proxy.ProxyHttpClient)
+	baseURL, err := getWeixinClawBaseURL(pipeObj)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	client := pipepkg.NewWeixinClawClient(baseURL, "", proxy.ProxyHttpClient)
 	status, err := client.PollQRCodeStatus(qrcode)
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -193,9 +233,17 @@ func (c *ApiController) WaitWeixinClawLogin() {
 		}
 		pipeObj.Token = status.BotToken
 		if status.BaseUrl != "" {
-			pipeObj.SecretKey = status.BaseUrl
+			if err = object.SetPipeRuntimeValue(pipeObj.Owner, pipeObj.Name, weixinClawRuntimeBaseURL, status.BaseUrl); err != nil {
+				c.ResponseError(err.Error())
+				return
+			}
 		}
-		pipeObj.ChatId = status.IlinkUserId
+		if status.IlinkUserId != "" {
+			if err = object.SetPipeRuntimeValue(pipeObj.Owner, pipeObj.Name, weixinClawRuntimeIlinkUserID, status.IlinkUserId); err != nil {
+				c.ResponseError(err.Error())
+				return
+			}
+		}
 		pipeObj.State = "Active"
 		if _, err = object.UpdatePipe(pipeObj.GetId(), pipeObj); err != nil {
 			c.ResponseError(err.Error())
@@ -203,8 +251,7 @@ func (c *ApiController) WaitWeixinClawLogin() {
 		}
 		refreshWeixinClawMonitor(pipeObj)
 	} else if status.Status == "scaned_but_redirect" && status.RedirectHost != "" {
-		pipeObj.SecretKey = fmt.Sprintf("https://%s", status.RedirectHost)
-		if _, err = object.UpdatePipe(pipeObj.GetId(), pipeObj); err != nil {
+		if err = object.SetPipeRuntimeValue(pipeObj.Owner, pipeObj.Name, weixinClawRuntimeBaseURL, fmt.Sprintf("https://%s", status.RedirectHost)); err != nil {
 			c.ResponseError(err.Error())
 			return
 		}

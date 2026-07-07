@@ -96,11 +96,6 @@ func (c *ApiController) UpdatePipe() {
 		return
 	}
 
-	if err = normalizePipeStore(&pipe); err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
-
 	success, err := object.UpdatePipe(id, &pipe)
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -128,10 +123,6 @@ func (c *ApiController) AddPipe() {
 	}
 
 	pipe.Owner = "admin"
-	if err = normalizePipeStore(&pipe); err != nil {
-		c.ResponseError(err.Error())
-		return
-	}
 	success, err := object.AddPipe(&pipe)
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -140,20 +131,6 @@ func (c *ApiController) AddPipe() {
 	startWeixinClawMonitorIfNeeded(&pipe)
 
 	c.ResponseOk(success)
-}
-
-func normalizePipeStore(pipe *object.Pipe) error {
-	if pipe == nil || pipe.Store != "" {
-		return nil
-	}
-	store, err := object.GetDefaultStore("admin")
-	if err != nil {
-		return err
-	}
-	if store != nil {
-		pipe.Store = store.Name
-	}
-	return nil
 }
 
 // DeletePipe

@@ -75,9 +75,6 @@ class PipeEditPage extends React.Component {
 
   getStoreOptions() {
     return this.state.storeNames.map((store) => {
-      if (typeof store === "string") {
-        return Setting.getOption(store, store);
-      }
       const label = store.displayName ? `${store.displayName} (${store.name})` : store.name;
       return Setting.getOption(label, store.name);
     });
