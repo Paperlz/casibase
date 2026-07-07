@@ -408,6 +408,11 @@ func (a *Adapter) createTable() {
 		panic(err)
 	}
 
+	err = a.engine.Sync2(new(PipeRuntime))
+	if err != nil {
+		panic(err)
+	}
+
 	err = a.engine.Sync2(new(Comment))
 	if err != nil {
 		panic(err)

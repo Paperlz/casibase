@@ -36,7 +36,7 @@ type pipeAnswerSender interface {
 
 type defaultPipeAnswerSender struct {
 	provider  pipepkg.Pipe
-	chatId    string
+	incoming  *pipepkg.IncomingMessage
 	text      string
 	errorText string
 }
@@ -279,6 +279,13 @@ func ensurePipeChat(pipeObj *object.Pipe, incoming *pipepkg.IncomingMessage) (*o
 		return nil, err
 	}
 	if chat != nil {
+		if pipeObj.Store != "" && chat.Store != pipeObj.Store {
+			chat.Store = pipeObj.Store
+			chat.UpdatedTime = util.GetCurrentTime()
+			if _, err = object.UpdateChat(chat.GetId(), chat); err != nil {
+				return nil, err
+			}
+		}
 		return chat, nil
 	}
 
@@ -380,7 +387,7 @@ func sendPipeAnswer(provider pipepkg.Pipe, pipeObj *object.Pipe, incoming *pipep
 		return
 	}
 
-	var sender pipeAnswerSender = newDefaultPipeAnswerSender(provider, incoming.ChatId)
+	var sender pipeAnswerSender = newDefaultPipeAnswerSender(provider, incoming)
 	if streamProvider, ok := provider.(pipepkg.StreamPipe); ok {
 		if writer, streamErr := streamProvider.SendStreamMessage(incoming, ""); streamErr == nil && writer != nil {
 			sender = newStreamPipeAnswerSender(writer)
@@ -402,8 +409,8 @@ func sendPipeAnswer(provider pipepkg.Pipe, pipeObj *object.Pipe, incoming *pipep
 	_ = sender.CloseMessage("")
 }
 
-func newDefaultPipeAnswerSender(provider pipepkg.Pipe, chatId string) *defaultPipeAnswerSender {
-	return &defaultPipeAnswerSender{provider: provider, chatId: chatId}
+func newDefaultPipeAnswerSender(provider pipepkg.Pipe, incoming *pipepkg.IncomingMessage) *defaultPipeAnswerSender {
+	return &defaultPipeAnswerSender{provider: provider, incoming: incoming}
 }
 
 func (s *defaultPipeAnswerSender) WriteMessage(text string) error {
@@ -432,7 +439,10 @@ func (s *defaultPipeAnswerSender) CloseMessage(text string) error {
 			return nil
 		}
 	}
-	return s.provider.SendMessage(s.chatId, finalText)
+	if sender, ok := s.provider.(pipepkg.IncomingMessageSender); ok {
+		return sender.SendIncomingMessage(s.incoming, finalText)
+	}
+	return s.provider.SendMessage(s.incoming.ChatId, finalText)
 }
 
 func newStreamPipeAnswerSender(writer pipepkg.PipeMessageWriter) *streamPipeAnswerSender {

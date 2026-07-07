@@ -29,6 +29,7 @@ import (
 	_ "github.com/beego/beego/session/redis"
 	"github.com/the-open-agent/openagent/authz"
 	"github.com/the-open-agent/openagent/conf"
+	"github.com/the-open-agent/openagent/controllers"
 	"github.com/the-open-agent/openagent/internal/cli"
 	"github.com/the-open-agent/openagent/internal/localocr"
 	"github.com/the-open-agent/openagent/object"
@@ -62,6 +63,7 @@ func main() {
 	go object.InitCommitRecordsTask()
 	go object.InitMessageTransactionRetry()
 	go object.InitNotificationSender()
+	controllers.InitWeixinClawPipeMonitors()
 
 	beego.SetStaticPath("/swagger", "swagger")
 	beego.InsertFilter("*", beego.BeforeRouter, routers.CorsFilter)

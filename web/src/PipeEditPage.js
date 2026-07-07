@@ -14,8 +14,8 @@
 
 import React from "react";
 import Loading from "./common/Loading";
-import {Button, Card, Col, Input, Row, Select, Switch} from "antd";
-import {LinkOutlined, SendOutlined} from "@ant-design/icons";
+import {Button, Card, Col, Input, QRCode, Row, Select, Switch} from "antd";
+import {LinkOutlined, LoginOutlined, SendOutlined} from "@ant-design/icons";
 import * as PipeBackend from "./backend/PipeBackend";
 import * as StoreBackend from "./backend/StoreBackend";
 import * as Setting from "./Setting";
@@ -38,12 +38,25 @@ class PipeEditPage extends React.Component {
       testResult: "",
       isTesting: false,
       isSendingWebhook: false,
+      isLoggingIn: false,
+      loginQrcode: "",
+      loginQrcodeUrl: "",
+      loginStatus: "",
     };
+    this.loginTimer = null;
+    this.loginPolling = false;
   }
 
   UNSAFE_componentWillMount() {
     this.getStoreNames();
     this.getPipe();
+  }
+
+  componentWillUnmount() {
+    if (this.loginTimer) {
+      clearTimeout(this.loginTimer);
+    }
+    this.loginPolling = false;
   }
 
   getStoreNames() {
@@ -62,6 +75,9 @@ class PipeEditPage extends React.Component {
 
   getStoreOptions() {
     return this.state.storeNames.map((store) => {
+      if (typeof store === "string") {
+        return Setting.getOption(store, store);
+      }
       const label = store.displayName ? `${store.displayName} (${store.name})` : store.name;
       return Setting.getOption(label, store.name);
     });
@@ -72,9 +88,6 @@ class PipeEditPage extends React.Component {
       .then((res) => {
         if (res.status === "ok") {
           const pipe = res.data;
-          if (!pipe.store) {
-            pipe.store = "store-built-in";
-          }
           this.setState({
             pipe: pipe,
             originalPipe: Setting.deepCopy(pipe),
@@ -106,6 +119,66 @@ class PipeEditPage extends React.Component {
       .catch((error) => {
         this.setState({isSendingWebhook: false});
         Setting.showMessage("error", `${i18next.t("general:Failed to save")}: ${error}`);
+      });
+  }
+
+  startWeixinClawLogin() {
+    if (this.loginTimer) {
+      clearTimeout(this.loginTimer);
+    }
+    this.loginPolling = false;
+    this.setState({isLoggingIn: true, loginQrcode: "", loginQrcodeUrl: "", loginStatus: i18next.t("pipe:Weixin Claw login starting")});
+    const id = `${this.state.pipe.owner}/${this.state.pipe.name}`;
+    PipeBackend.startWeixinClawLogin(id)
+      .then((res) => {
+        if (res.status !== "ok") {
+          this.setState({isLoggingIn: false, loginStatus: res.msg});
+          Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
+          return;
+        }
+        const qrcode = res.data?.qrcode || "";
+        const qrcodeUrl = res.data?.qrcode_img_content || res.data?.qrcodeImageContent || "";
+        this.setState({loginQrcode: qrcode, loginQrcodeUrl: qrcodeUrl, loginStatus: i18next.t("pipe:Weixin Claw scan prompt")});
+        this.loginPolling = true;
+        this.waitWeixinClawLogin(qrcode);
+      })
+      .catch((error) => {
+        this.setState({isLoggingIn: false, loginStatus: String(error)});
+        Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${error}`);
+      });
+  }
+
+  waitWeixinClawLogin(qrcode) {
+    if (!qrcode || !this.loginPolling) {
+      return;
+    }
+    const id = `${this.state.pipe.owner}/${this.state.pipe.name}`;
+    PipeBackend.waitWeixinClawLogin(id, qrcode)
+      .then((res) => {
+        if (res.status !== "ok") {
+          this.setState({isLoggingIn: false, loginStatus: res.msg});
+          this.loginPolling = false;
+          return;
+        }
+        const status = res.data?.status || "";
+        this.setState({loginStatus: status ? i18next.t(`pipe:Weixin Claw status ${status}`) : ""});
+        if (status === "confirmed" || status === "binded_redirect") {
+          this.loginPolling = false;
+          this.setState({isLoggingIn: false});
+          this.getPipe();
+          Setting.showMessage("success", i18next.t("pipe:Weixin Claw login success"));
+        } else if (status === "expired" || status === "verify_code_blocked") {
+          this.loginPolling = false;
+          this.setState({isLoggingIn: false});
+        } else {
+          this.loginTimer = setTimeout(() => this.waitWeixinClawLogin(qrcode), 1000);
+        }
+      })
+      .catch((error) => {
+        this.setState({loginStatus: String(error)});
+        if (this.loginPolling) {
+          this.loginTimer = setTimeout(() => this.waitWeixinClawLogin(qrcode), 3000);
+        }
       });
   }
 
@@ -253,6 +326,7 @@ class PipeEditPage extends React.Component {
                   {id: "Facebook Messenger", name: "Facebook Messenger"},
                   {id: "Threads", name: "Threads"},
                   {id: "WeChat", name: "WeChat"},
+                  {id: "Weixin Claw", name: "Weixin Claw"},
                   {id: "Snapchat", name: "Snapchat"},
                   {id: "X Direct Messages", name: "X Direct Messages"},
                 ].map((item, index) => (
@@ -270,21 +344,23 @@ class PipeEditPage extends React.Component {
               <Select
                 virtual={false}
                 style={{width: "100%"}}
-                value={pipe.store || "store-built-in"}
+                value={pipe.store || undefined}
                 onChange={(value) => this.updatePipeField("store", value)}
                 options={this.getStoreOptions()}
               />
             </Col>
           </Row>
 
-          <Row style={{marginTop: "20px"}}>
-            <Col style={{marginTop: "5px"}} span={Setting.isMobile() ? 22 : 2}>
-              {Setting.getLabel(i18next.t("general:Token"), i18next.t("general:Token - Tooltip"))}
-            </Col>
-            <Col span={22}>
-              <Input.Password value={pipe.token} onChange={e => this.updatePipeField("token", e.target.value)} />
-            </Col>
-          </Row>
+          {pipe.type !== "Weixin Claw" && (
+            <Row style={{marginTop: "20px"}}>
+              <Col style={{marginTop: "5px"}} span={Setting.isMobile() ? 22 : 2}>
+                {Setting.getLabel(i18next.t("general:Token"), i18next.t("general:Token - Tooltip"))}
+              </Col>
+              <Col span={22}>
+                <Input.Password value={pipe.token} onChange={e => this.updatePipeField("token", e.target.value)} />
+              </Col>
+            </Row>
+          )}
 
           {(pipe.type === "Discord" || pipe.type === "WhatsApp" || pipe.type === "Slack" || pipe.type === "Facebook Messenger" || pipe.type === "Threads" || pipe.type === "WeChat" || pipe.type === "Snapchat" || pipe.type === "X Direct Messages") && (
             <Row style={{marginTop: "20px"}}>
@@ -427,20 +503,41 @@ class PipeEditPage extends React.Component {
 
         {/* Card 2: Pipe Test */}
         <Card size="small" title={i18next.t("pipe:Pipe Test")} style={sectionCardStyle} headStyle={cardHeadStyle}>
-          <Row style={{marginTop: "10px"}}>
-            <Col span={24}>
-              <Button
-                type="primary"
-                loading={this.state.isSendingWebhook}
-                onClick={() => this.setPipeWebhook()}
-              >
-                {i18next.t("provider:Set Webhook")}
-              </Button>
-              <span style={{marginLeft: "12px", color: "var(--ant-color-text-secondary)", fontSize: "13px"}}>
-                {i18next.t("provider:Webhook - Tooltip")}
-              </span>
-            </Col>
-          </Row>
+          {pipe.type === "Weixin Claw" ? (
+            <Row style={{marginTop: "10px"}} gutter={16}>
+              <Col span={Setting.isMobile() ? 22 : 6}>
+                <Button
+                  type="primary"
+                  icon={<LoginOutlined />}
+                  loading={this.state.isLoggingIn}
+                  onClick={() => this.startWeixinClawLogin()}
+                >
+                  {i18next.t("pipe:Login with Weixin QR")}
+                </Button>
+              </Col>
+              <Col span={Setting.isMobile() ? 22 : 10}>
+                {this.state.loginQrcodeUrl && <QRCode value={this.state.loginQrcodeUrl} size={180} />}
+              </Col>
+              <Col span={Setting.isMobile() ? 22 : 8} style={{display: "flex", alignItems: "center"}}>
+                <span style={{color: "var(--ant-color-text-secondary)", fontSize: "13px"}}>{this.state.loginStatus}</span>
+              </Col>
+            </Row>
+          ) : (
+            <Row style={{marginTop: "10px"}}>
+              <Col span={24}>
+                <Button
+                  type="primary"
+                  loading={this.state.isSendingWebhook}
+                  onClick={() => this.setPipeWebhook()}
+                >
+                  {i18next.t("provider:Set Webhook")}
+                </Button>
+                <span style={{marginLeft: "12px", color: "var(--ant-color-text-secondary)", fontSize: "13px"}}>
+                  {i18next.t("provider:Webhook - Tooltip")}
+                </span>
+              </Col>
+            </Row>
+          )}
         </Card>
 
         {/* Card 3: Chat Test */}

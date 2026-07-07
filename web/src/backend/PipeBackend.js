@@ -99,3 +99,23 @@ export function chatTest(id, chatId, message) {
     },
   }).then(res => Setting.handleFetchResponse(res));
 }
+
+export function startWeixinClawLogin(id) {
+  return fetch(`${Setting.ServerUrl}/api/weixin-claw-login/start?id=${encodeURIComponent(id)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}
+
+export function waitWeixinClawLogin(id, qrcode) {
+  return fetch(`${Setting.ServerUrl}/api/weixin-claw-login/wait?id=${encodeURIComponent(id)}&qrcode=${encodeURIComponent(qrcode)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => Setting.handleFetchResponse(res));
+}

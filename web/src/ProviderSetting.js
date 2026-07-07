@@ -534,11 +534,15 @@ const openaiEmbeddings = [
 
 export function getProviderLogoURL(provider) {
   const otherProviderInfo = getOtherProviderInfo();
-  if (!provider || !otherProviderInfo[provider.category] || !otherProviderInfo[provider.category][provider.type]) {
+  if (!provider) {
+    return "";
+  }
+  const type = provider.category === "Chat" && provider.type === "Weixin Claw" ? "WeChat" : provider.type;
+  if (!otherProviderInfo[provider.category] || !otherProviderInfo[provider.category][type]) {
     return "";
   }
 
-  return otherProviderInfo[provider.category][provider.type].logo;
+  return otherProviderInfo[provider.category][type].logo;
 }
 
 export function isProviderSupportWebSearch(provider) {
@@ -1407,6 +1411,7 @@ export function getPipeTypeOptions() {
     {id: "Facebook Messenger", name: "Facebook Messenger"},
     {id: "Threads", name: "Threads"},
     {id: "WeChat", name: "WeChat"},
+    {id: "Weixin Claw", name: "Weixin Claw"},
     {id: "Snapchat", name: "Snapchat"},
     {id: "X Direct Messages", name: "X Direct Messages"},
   ];
@@ -1421,6 +1426,7 @@ export function getPipePlatformMetadata(type) {
     "Facebook Messenger": {desc: "Connect via Facebook Messenger", tokenLabel: "Page Access Token", tokenPlaceholder: "EAAxxxxxxxx...", helpUrl: "https://developers.facebook.com/docs/messenger-platform"},
     "Threads": {desc: "Connect via Meta Threads", tokenLabel: "User Access Token", tokenPlaceholder: "THRDSxxxxxxxx...", helpUrl: "https://developers.facebook.com/docs/threads"},
     "WeChat": {desc: "Connect via WeChat Official Account", tokenLabel: "Access Token", tokenPlaceholder: "your-access-token", helpUrl: "https://developers.weixin.qq.com"},
+    "Weixin Claw": {desc: "Connect via personal Weixin QR login", tokenLabel: "", tokenPlaceholder: "", helpUrl: "https://github.com/the-open-agent/openagent"},
     "Snapchat": {desc: "Connect via Snapchat Kit Bot", tokenLabel: "Access Token", tokenPlaceholder: "your-oauth-access-token", helpUrl: "https://kit.snapchat.com/"},
     "X Direct Messages": {desc: "Connect via X Direct Messages", tokenLabel: "OAuth Token", tokenPlaceholder: "your-oauth-token", helpUrl: "https://developer.x.com"},
   };

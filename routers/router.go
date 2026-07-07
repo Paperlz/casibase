@@ -117,6 +117,8 @@ func initAPI() {
 	beego.Router("/api/delete-pipe", &controllers.ApiController{}, "POST:DeletePipe")
 	beego.Router("/api/set-pipe-webhook", &controllers.ApiController{}, "POST:SetPipeWebhook")
 	beego.Router("/api/chat-test", &controllers.ApiController{}, "POST:ChatTest")
+	beego.Router("/api/weixin-claw-login/start", &controllers.ApiController{}, "POST:StartWeixinClawLogin")
+	beego.Router("/api/weixin-claw-login/wait", &controllers.ApiController{}, "POST:WaitWeixinClawLogin")
 	beego.Router("/api/chat-webhook/:pipeType/:pipeName", &controllers.ApiController{}, "GET:ChatWebhookVerify;POST:ChatWebhook")
 
 	beego.Router("/api/get-servers", &controllers.ApiController{}, "GET:GetServers")

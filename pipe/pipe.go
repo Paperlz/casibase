@@ -43,6 +43,10 @@ type PipeMessageWriter interface {
 	CloseMessage(text string) error
 }
 
+type IncomingMessageSender interface {
+	SendIncomingMessage(incoming *IncomingMessage, text string) error
+}
+
 // StreamPipe is implemented by pipes that can progressively update an
 // in-flight response (for example via send + edit message APIs).
 type StreamPipe interface {
@@ -90,6 +94,8 @@ func Get(typ string, token string, secretKey string, pipeName string, lang strin
 		p, err = NewFacebookMessengerPipe(token, secretKey, pipeName, proxy.ProxyHttpClient)
 	} else if typ == "WeChat" {
 		p, err = NewWeChatPipe(token, secretKey, pipeName, proxy.ProxyHttpClient)
+	} else if typ == WeixinClawType {
+		p, err = NewWeixinClawPipe(secretKey, token, proxy.ProxyHttpClient)
 	} else if typ == "Snapchat" {
 		p, err = NewSnapchatPipe(token, secretKey, proxy.ProxyHttpClient)
 	} else if typ == "X Direct Messages" {
