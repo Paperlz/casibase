@@ -57,6 +57,7 @@ class FileTree extends React.Component {
 
     this.filePane = React.createRef();
     this.uploadedFileIdMap = {};
+    this.fetchToken = 0;
     this.handleKeyDown = this.handleKeyDown.bind(this);
   }
 
@@ -469,6 +470,8 @@ class FileTree extends React.Component {
             const url = info.node.url;
 
             if (!this.isExtForDocViewer(ext) && !this.isExtForFileViewer(ext)) {
+              const requestToken = ++this.fetchToken;
+
               this.setState({
                 loading: true,
               });
@@ -479,10 +482,21 @@ class FileTree extends React.Component {
               })
                 .then(res => res.text())
                 .then(res => {
+                  if (requestToken !== this.fetchToken) {
+                    return;
+                  }
+
                   this.setState({
                     text: res,
                     loading: false,
                   });
+                })
+                .catch(() => {
+                  if (requestToken !== this.fetchToken) {
+                    return;
+                  }
+
+                  this.setState({loading: false});
                 });
             }
           }
