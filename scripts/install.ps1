@@ -52,6 +52,14 @@ try {
 
     Write-Info "Installing to $InstallDir ..."
     Copy-Item -Path $ExePath -Destination (Join-Path $InstallDir 'openagent.exe') -Force
+
+    # Record the version so it can be read without running the binary. The release
+    # binary is built with -trimpath and packed with UPX, which erases the version
+    # from its Go build metadata. WriteAllText writes UTF-8 with no BOM. Strip the
+    # leading "v" so this matches cli.Version (goreleaser's {{.Version}} has no
+    # "v"), which is what the running binary and `openagent --version` report.
+    $VersionString = $Version -replace '^v', ''
+    [System.IO.File]::WriteAllText((Join-Path $InstallDir 'version'), "$VersionString`n")
 }
 finally {
     Remove-Item -Recurse -Force $TmpDir -ErrorAction SilentlyContinue
