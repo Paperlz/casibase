@@ -50,6 +50,7 @@ p, admin, *, *
 p, anonymous, *, /api/signin
 p, anonymous, *, /api/signout
 p, anonymous, *, /api/health
+p, anonymous, *, /api/get-version-info
 p, anonymous, *, /api/chrome-connect
 p, anonymous, *, /api/get-account
 p, anonymous, *, /api/update-account
