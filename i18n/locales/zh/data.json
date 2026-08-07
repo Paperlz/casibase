@@ -189,6 +189,7 @@
     "Only docx and pdf files are allowed": "仅允许 docx 和 pdf 文件"
   },
   "storage": {
+    "Casdoor is not configured or not reachable": "Casdoor 未配置或无法连接",
     "storage provider name: [%s] doesn't exist": "存储提供商名称：[%s] 不存在"
   },
   "store": {

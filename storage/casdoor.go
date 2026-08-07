@@ -16,6 +16,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/the-open-agent/openagent/auth"
@@ -30,6 +31,9 @@ type CasdoorProvider struct {
 func NewCasdoorProvider(providerName string, lang string) (*CasdoorProvider, error) {
 	if providerName == "" {
 		return nil, fmt.Errorf(i18n.Translate(lang, "storage:storage provider name: [%s] doesn't exist"), providerName)
+	}
+	if !conf.IsCasdoorAvailable() {
+		return nil, errors.New(i18n.Translate(lang, "storage:Casdoor is not configured or not reachable"))
 	}
 
 	return &CasdoorProvider{providerName: providerName}, nil

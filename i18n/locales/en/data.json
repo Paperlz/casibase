@@ -189,6 +189,7 @@
     "Only docx and pdf files are allowed": "Only docx and pdf files are allowed"
   },
   "storage": {
+    "Casdoor is not configured or not reachable": "Casdoor is not configured or not reachable",
     "storage provider name: [%s] doesn't exist": "storage provider name: [%s] doesn't exist"
   },
   "store": {
